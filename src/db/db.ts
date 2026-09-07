@@ -12,12 +12,13 @@ export class EqrtDatabase extends Dexie {
 
   constructor() {
     super('EqrtOperationsDB');
-    this.version(1).stores({
-      equipment: 'Tagging Number, System, Location, Status',
-      schedules: 'Tagging Number',
-      overrides: 'id, Tagging Number, Date',
-      routineLogs: 'transactionId, Tagging Number, Logged Date',
-      downtimeLogs: 'transactionId, Tagging Number, Logged Date',
+    // Using valid identifier keyPaths without spaces for full IndexedDB compliance
+    this.version(2).stores({
+      equipment: 'taggingNumber, System, Location, Status',
+      schedules: 'taggingNumber',
+      overrides: 'id, taggingNumber, Date',
+      routineLogs: 'transactionId, taggingNumber, LoggedDate',
+      downtimeLogs: 'transactionId, taggingNumber, LoggedDate',
       outbox: 'id, status, clientTimestamp, taggingNumber',
       photos: 'txId, logType, status, createdAt'
     });

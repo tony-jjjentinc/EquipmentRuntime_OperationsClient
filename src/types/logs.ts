@@ -1,4 +1,7 @@
 export interface RoutineLog {
+  id?: string;
+  taggingNumber?: string;
+  LoggedDate?: string;
   "Transaction ID"?: string;
   "transactionId"?: string;
   "System"?: string;
@@ -22,6 +25,9 @@ export interface RoutineLog {
 }
 
 export interface DowntimeLog {
+  id?: string;
+  taggingNumber?: string;
+  LoggedDate?: string;
   "Transaction ID"?: string;
   "transactionId"?: string;
   "System"?: string;

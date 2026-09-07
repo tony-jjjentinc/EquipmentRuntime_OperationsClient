@@ -1,4 +1,6 @@
 export interface Equipment {
+  taggingNumber?: string;
+  id?: string;
   "Tagging Number": string;
   "Equipment ID"?: string;
   "Common Name": string;
@@ -24,6 +26,8 @@ export interface Equipment {
 }
 
 export interface Schedule {
+  taggingNumber?: string;
+  id?: string;
   "Tagging Number"?: string;
   "Equipment ID"?: string;
   "Startup Time"?: string;

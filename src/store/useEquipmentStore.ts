@@ -63,23 +63,34 @@ export const useEquipmentStore = create<EquipmentStore>((set, get) => ({
   error: null,
 
   loadInitialData: async (token: string) => {
-    // 1. Try loading cached data from Dexie first for instant render
-    const cachedEq = await db.equipment.toArray();
-    const cachedSched = await db.schedules.toArray();
-    const cachedOv = await db.overrides.toArray();
-    const cachedRoutine = await db.routineLogs.toArray();
-    const cachedDowntime = await db.downtimeLogs.toArray();
+    // 1. Try loading cached data from Dexie first for instant offline render
+    let cachedEq: Equipment[] = [];
+    let cachedSched: Schedule[] = [];
+    let cachedOv: OverrideSchedule[] = [];
+    let cachedRoutine: RoutineLog[] = [];
+    let cachedDowntime: DowntimeLog[] = [];
 
-    if (cachedEq.length > 0) {
-      set({
-        equipment: cachedEq,
-        schedules: cachedSched,
-        overrideSchedules: cachedOv,
-        routineLogs: cachedRoutine,
-        downtimeLogs: cachedDowntime,
-        isLoading: false
-      });
-    } else {
+    try {
+      cachedEq = await db.equipment.toArray();
+      cachedSched = await db.schedules.toArray();
+      cachedOv = await db.overrides.toArray();
+      cachedRoutine = await db.routineLogs.toArray();
+      cachedDowntime = await db.downtimeLogs.toArray();
+
+      if (cachedEq.length > 0) {
+        set({
+          equipment: cachedEq,
+          schedules: cachedSched,
+          overrideSchedules: cachedOv,
+          routineLogs: cachedRoutine,
+          downtimeLogs: cachedDowntime,
+          isLoading: false
+        });
+      } else {
+        set({ isLoading: true });
+      }
+    } catch (dbErr) {
+      console.warn('Dexie read notice:', dbErr);
       set({ isLoading: true });
     }
 
@@ -88,11 +99,40 @@ export const useEquipmentStore = create<EquipmentStore>((set, get) => ({
       const data = await callGasApi<any>('getInitialData', {}, token);
 
       if (data) {
-        const enrichedEq = data.equipment || [];
-        const scheds = data.schedules || [];
-        const overrides = data.overrideSchedules || [];
-        const routines = data.routineLogs || [];
-        const downtimes = data.downtimeLogs || [];
+        const enrichedEq = (data.equipment || []).map((eq: any) => ({
+          ...eq,
+          taggingNumber: eq['Tagging Number'] || eq['Equipment ID'] || '',
+          id: eq['Tagging Number'] || eq['Equipment ID'] || ''
+        }));
+
+        const scheds = (data.schedules || []).map((s: any) => ({
+          ...s,
+          taggingNumber: s['Tagging Number'] || s['Equipment ID'] || '',
+          id: s['Tagging Number'] || s['Equipment ID'] || ''
+        }));
+
+        const overrides = (data.overrideSchedules || []).map((o: any, idx: number) => ({
+          ...o,
+          id: o['Override ID'] || o.id || `ov-${idx}`,
+          taggingNumber: o['Tagging Number'] || o['Equipment ID'] || ''
+        }));
+
+        const routines = (data.routineLogs || []).map((r: any, idx: number) => ({
+          ...r,
+          id: r['Transaction ID'] || r.transactionId || `r-${idx}`,
+          transactionId: r['Transaction ID'] || r.transactionId || `r-${idx}`,
+          taggingNumber: r['Tagging Number'] || r['Equipment ID'] || '',
+          LoggedDate: r['Logged Date'] || ''
+        }));
+
+        const downtimes = (data.downtimeLogs || []).map((d: any, idx: number) => ({
+          ...d,
+          id: d['Transaction ID'] || d.transactionId || `d-${idx}`,
+          transactionId: d['Transaction ID'] || d.transactionId || `d-${idx}`,
+          taggingNumber: d['Tagging Number'] || d['Equipment ID'] || '',
+          LoggedDate: d['Logged Date'] || ''
+        }));
+
         const hist = data.historyLogs || [];
         const assignments = data.equipmentAssignments || [];
         const shutTypes = data.shutdownTypes || get().shutdownTypes;
@@ -119,16 +159,20 @@ export const useEquipmentStore = create<EquipmentStore>((set, get) => ({
         });
 
         // 3. Persist to IndexedDB cache
-        await db.equipment.clear();
-        await db.equipment.bulkPut(enrichedEq);
-        await db.schedules.clear();
-        await db.schedules.bulkPut(scheds);
-        await db.overrides.clear();
-        await db.overrides.bulkPut(overrides);
-        await db.routineLogs.clear();
-        await db.routineLogs.bulkPut(routines);
-        await db.downtimeLogs.clear();
-        await db.downtimeLogs.bulkPut(downtimes);
+        try {
+          await db.equipment.clear();
+          await db.equipment.bulkPut(enrichedEq);
+          await db.schedules.clear();
+          await db.schedules.bulkPut(scheds);
+          await db.overrides.clear();
+          await db.overrides.bulkPut(overrides);
+          await db.routineLogs.clear();
+          await db.routineLogs.bulkPut(routines);
+          await db.downtimeLogs.clear();
+          await db.downtimeLogs.bulkPut(downtimes);
+        } catch (cacheErr) {
+          console.warn('Dexie cache write warning:', cacheErr);
+        }
       }
     } catch (err: any) {
       console.warn('Network loadInitialData notice:', err.message);
@@ -163,33 +207,66 @@ export const useEquipmentStore = create<EquipmentStore>((set, get) => ({
   },
 
   optimisticAddRoutineLog: async (log: RoutineLog) => {
+    const normalizedLog = {
+      ...log,
+      taggingNumber: log["Tagging Number"] || log["Equipment ID"] || log.taggingNumber || '',
+      transactionId: log["Transaction ID"] || log.transactionId || crypto.randomUUID(),
+      LoggedDate: log["Logged Date"] || ''
+    };
+
     set(state => {
       const updated = state.routineLogs.filter(
-        l => (l["Tagging Number"] || l["Equipment ID"]) !== (log["Tagging Number"] || log["Equipment ID"])
+        l => (l["Tagging Number"] || l["Equipment ID"]) !== normalizedLog.taggingNumber
       );
-      return { routineLogs: [...updated, log] };
+      return { routineLogs: [...updated, normalizedLog] };
     });
-    await db.routineLogs.put(log);
+
+    try {
+      await db.routineLogs.put(normalizedLog);
+    } catch (err) {
+      console.warn('Dexie optimisticAddRoutineLog notice:', err);
+    }
   },
 
   optimisticAddDowntimeLog: async (dLog: DowntimeLog, autoRoutine?: RoutineLog) => {
+    const normalizedDLog = {
+      ...dLog,
+      taggingNumber: dLog["Tagging Number"] || dLog["Equipment ID"] || dLog.taggingNumber || '',
+      transactionId: dLog["Transaction ID"] || dLog.transactionId || crypto.randomUUID(),
+      LoggedDate: dLog["Logged Date"] || ''
+    };
+
+    let normalizedAutoRoutine: RoutineLog | undefined;
+    if (autoRoutine) {
+      normalizedAutoRoutine = {
+        ...autoRoutine,
+        taggingNumber: autoRoutine["Tagging Number"] || autoRoutine["Equipment ID"] || autoRoutine.taggingNumber || '',
+        transactionId: autoRoutine["Transaction ID"] || autoRoutine.transactionId || crypto.randomUUID(),
+        LoggedDate: autoRoutine["Logged Date"] || ''
+      };
+    }
+
     set(state => {
-      const newDowntimes = [...state.downtimeLogs, dLog];
+      const newDowntimes = [...state.downtimeLogs, normalizedDLog];
       let newRoutines = state.routineLogs;
-      if (autoRoutine) {
+      if (normalizedAutoRoutine) {
         const hasToday = state.routineLogs.some(
-          l => (l["Tagging Number"] || l["Equipment ID"]) === (autoRoutine["Tagging Number"] || autoRoutine["Equipment ID"])
+          l => (l["Tagging Number"] || l["Equipment ID"]) === normalizedAutoRoutine!.taggingNumber
         );
         if (!hasToday) {
-          newRoutines = [...state.routineLogs, autoRoutine];
+          newRoutines = [...state.routineLogs, normalizedAutoRoutine];
         }
       }
       return { downtimeLogs: newDowntimes, routineLogs: newRoutines };
     });
 
-    await db.downtimeLogs.put(dLog);
-    if (autoRoutine) {
-      await db.routineLogs.put(autoRoutine);
+    try {
+      await db.downtimeLogs.put(normalizedDLog);
+      if (normalizedAutoRoutine) {
+        await db.routineLogs.put(normalizedAutoRoutine);
+      }
+    } catch (err) {
+      console.warn('Dexie optimisticAddDowntimeLog notice:', err);
     }
   },
 
@@ -229,17 +306,21 @@ export const useEquipmentStore = create<EquipmentStore>((set, get) => ({
       return { downtimeLogs: updatedDowntimes, routineLogs: updatedRoutines };
     });
 
-    // Update Dexie
-    const openD = await db.downtimeLogs.where('Tagging Number').equals(tag).toArray();
-    for (const d of openD) {
-      if (!d["Restarted At"]) {
-        await db.downtimeLogs.put({
-          ...d,
-          "Restarted At": restartTime,
-          "Restarted By": operator,
-          "Restart On-Ground Remarks": remarks || ''
-        });
+    // Update Dexie using the valid index 'taggingNumber'
+    try {
+      const openD = await db.downtimeLogs.where('taggingNumber').equals(tag).toArray();
+      for (const d of openD) {
+        if (!d["Restarted At"]) {
+          await db.downtimeLogs.put({
+            ...d,
+            "Restarted At": restartTime,
+            "Restarted By": operator,
+            "Restart On-Ground Remarks": remarks || ''
+          });
+        }
       }
+    } catch (err) {
+      console.warn('Dexie optimisticRestartDowntime notice:', err);
     }
   }
 }));
