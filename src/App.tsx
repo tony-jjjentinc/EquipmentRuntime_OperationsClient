@@ -1,58 +1,70 @@
-import React, { useState, useEffect } from 'react';
-import { pingGasApi } from './api/gasClient';
+import React, { useEffect } from 'react';
+import { useAuthStore } from './store/useAuthStore';
+import { useEquipmentStore } from './store/useEquipmentStore';
+import { useUIStore } from './store/useUIStore';
+
+// Layout & Components
+import { Header } from './components/layout/Header';
+import { Navigation } from './components/layout/Navigation';
+import { LoginOverlay } from './components/layout/LoginOverlay';
+import { EquipmentGrid } from './components/equipment/EquipmentGrid';
+import { ActivityHistoryFeed } from './components/equipment/ActivityHistoryFeed';
+import { StateTimeline } from './components/equipment/StateTimeline';
+import { RoutineModal } from './components/forms/RoutineModal';
+import { DowntimeModal } from './components/forms/DowntimeModal';
+import { ImageModal } from './components/common/ImageModal';
 
 export const App: React.FC = () => {
-  const [onlineStatus, setOnlineStatus] = useState<boolean>(navigator.onLine);
-  const [gasConnected, setGasConnected] = useState<boolean | null>(null);
+  const { token, isAuthenticated, isLoading: isAuthLoading, initializeAuth } = useAuthStore();
+  const { loadInitialData } = useEquipmentStore();
+  const { activeTab } = useUIStore();
 
+  // 1. Initialize Authentication session on mount
   useEffect(() => {
-    const handleOnline = () => setOnlineStatus(true);
-    const handleOffline = () => setOnlineStatus(false);
+    initializeAuth();
+  }, [initializeAuth]);
 
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
+  // 2. Hydrate equipment data when authenticated
+  useEffect(() => {
+    if (isAuthenticated && token) {
+      loadInitialData(token);
+    }
+  }, [isAuthenticated, token, loadInitialData]);
 
-    // Initial ping check
-    pingGasApi().then(res => setGasConnected(res));
+  // 3. Render Authentication Screen if not logged in
+  if (isAuthLoading) {
+    return (
+      <div className="d-flex align-items-center justify-content-center min-vh-100 bg-light">
+        <div className="text-center">
+          <div className="spinner-border text-primary mb-3" role="status" style={{ width: '3rem', height: '3rem' }}>
+            <span className="visually-hidden">Loading session...</span>
+          </div>
+          <p className="text-muted small">Validating session credentials...</p>
+        </div>
+      </div>
+    );
+  }
 
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
-  }, []);
+  if (!isAuthenticated) {
+    return <LoginOverlay />;
+  }
 
   return (
-    <div className="container-fluid py-3 px-3">
-      <header className="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom">
-        <div className="d-flex align-items-center gap-2">
-          <i className="bi bi-cpu fs-4 text-primary"></i>
-          <div>
-            <h5 className="mb-0 fw-bold">Operations Dashboard</h5>
-            <small className="text-muted">Offline-First React PWA</small>
-          </div>
-        </div>
-        <div className="d-flex align-items-center gap-2">
-          <span className={`badge rounded-pill ${onlineStatus ? 'bg-success' : 'bg-danger'} shadow-sm`}>
-            <i className={`bi ${onlineStatus ? 'bi-wifi' : 'bi-wifi-off'} me-1`}></i>
-            {onlineStatus ? 'Network Online' : 'Network Offline'}
-          </span>
-          {onlineStatus && (
-            <span className={`badge rounded-pill ${gasConnected ? 'bg-primary' : 'bg-warning text-dark'} shadow-sm`}>
-              <i className={`bi ${gasConnected ? 'bi-cloud-check' : 'bi-cloud-slash'} me-1`}></i>
-              {gasConnected ? 'API Connected' : 'Connecting to API...'}
-            </span>
-          )}
-        </div>
-      </header>
+    <div className="min-vh-100 bg-light pb-5">
+      <Header />
 
-      <main>
-        <div className="alert alert-info d-flex align-items-center rounded-3 shadow-sm mb-4" role="alert">
-          <i className="bi bi-info-circle-fill fs-5 me-2"></i>
-          <div>
-            <strong>Phase 2 Scaffolding Initialized:</strong> React + Vite + TypeScript PWA foundation is established with JJJEI design system and Google Apps Script Simple-Request client.
-          </div>
-        </div>
+      <main className="container-fluid px-3">
+        <Navigation />
+
+        {activeTab === 'equipment' && <EquipmentGrid />}
+        {activeTab === 'history' && <ActivityHistoryFeed />}
       </main>
+
+      {/* Action Modals */}
+      <RoutineModal />
+      <DowntimeModal />
+      <StateTimeline />
+      <ImageModal />
     </div>
   );
 };
