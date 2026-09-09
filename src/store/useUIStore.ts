@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Equipment, RoutineLog, DowntimeLog } from '../types';
+import { Equipment, RuntimeLog } from '../types';
 
 interface UIStore {
   activeTab: 'equipment' | 'schedules' | 'history';
@@ -12,7 +12,7 @@ interface UIStore {
 
   // Modals
   selectedEquipment: Equipment | null;
-  selectedLog: RoutineLog | DowntimeLog | null;
+  selectedLog: RuntimeLog | null;
   showRoutineModal: boolean;
   routineAction: 'Startup' | 'Shutdown';
   showDowntimeModal: boolean;
@@ -29,7 +29,7 @@ interface UIStore {
   setHistorySystemFilter: (sys: string) => void;
   setHistoryMyActionsOnly: (val: boolean) => void;
 
-  openRoutineModal: (eq: Equipment, action: 'Startup' | 'Shutdown', log?: RoutineLog | DowntimeLog | null) => void;
+  openRoutineModal: (eq: Equipment, action: 'Startup' | 'Shutdown', log?: RuntimeLog | null) => void;
   closeRoutineModal: () => void;
   openDowntimeModal: (eq: Equipment, action: 'Shutdown' | 'Restart') => void;
   closeDowntimeModal: () => void;

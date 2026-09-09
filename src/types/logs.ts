@@ -1,54 +1,42 @@
-export interface RoutineLog {
+export interface RuntimeLog {
+  // --- Internal / Dexie keys (not sheet columns) ---
   id?: string;
+  transactionId?: string;
   taggingNumber?: string;
   LoggedDate?: string;
+  activityCategory?: string;
+  activityState?: string;
+
+  // --- 21 Canonical RuntimeLogs Columns ---
   "Transaction ID"?: string;
-  "transactionId"?: string;
+  "Logged Date": string;
   "System"?: string;
   "Component"?: string;
   "Tagging Number": string;
-  "Equipment ID"?: string;
   "Common Name"?: string;
-  "Logged Date": string;
-  "Action": string; // "Startup", "Shutdown", "Power Off"
-  "Started At": string;
-  "Shutdown At": string;
+  "Activity Category": 'Routine' | 'Downtime' | string;
+  "Activity State": 'Active' | 'Completed' | 'Running' | string;
+  "Started At"?: string;
+  "Shutdown At"?: string;
+  "Duration (Minutes)"?: number | string;
   "Started By"?: string;
   "Shutdown By"?: string;
   "Schedule Context"?: string;
-  "Estimated Operational Time"?: number | string;
-  "Startup On-Ground Remarks"?: string;
+  "Expected Startup"?: string;
+  "Expected Shutdown"?: string;
+  "Start On-Ground Remarks"?: string;
   "Shutdown On-Ground Remarks"?: string;
-  "Startup Image Attachments"?: string;
+  "Start Image Attachments"?: string;
   "Shutdown Image Attachments"?: string;
+  "Notes"?: string;
+
+  // --- Virtual routing key (not a column, used by backend dispatch) ---
+  "Action"?: string;
+
+  // Index signature for backward compatibility with unmigrated code paths
   [key: string]: any;
 }
 
-export interface DowntimeLog {
-  id?: string;
-  taggingNumber?: string;
-  LoggedDate?: string;
-  "Transaction ID"?: string;
-  "transactionId"?: string;
-  "System"?: string;
-  "Component"?: string;
-  "Tagging Number": string;
-  "Equipment ID"?: string;
-  "Common Name"?: string;
-  "Logged Date": string;
-  "Shutdown At": string;
-  "Restarted At": string;
-  "Shutdown Type"?: string;
-  "Shutdown Reason"?: string;
-  "Shutdown Reported By"?: string;
-  "Restarted By"?: string;
-  "Estimated Down Time"?: number | string;
-  "Shutdown On-Ground Remarks"?: string;
-  "Restart On-Ground Remarks"?: string;
-  "Shutdown Image Attachments"?: string;
-  "Restart Image Attachments"?: string;
-  [key: string]: any;
-}
 
 export interface HistoryLog {
   type: 'Routine' | 'Downtime';
@@ -71,5 +59,5 @@ export interface EquipmentOperationalState {
   state: OperationalState;
   subState: OperationalSubState;
   reason: string;
-  log: RoutineLog | DowntimeLog | null;
+  log: RuntimeLog | null;
 }

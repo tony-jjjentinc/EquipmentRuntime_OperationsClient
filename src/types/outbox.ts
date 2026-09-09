@@ -20,7 +20,7 @@ export interface OutboxItem {
 export interface PhotoBlobItem {
   txId: string; // Matches OutboxItem.id
   taggingNumber: string;
-  logType: 'routine' | 'downtime';
+  logType?: 'routine' | 'downtime' | 'runtime';
   actionType: string;
   blob: Blob;
   status: 'PENDING' | 'UPLOADING' | 'UPLOADED' | 'FAILED';

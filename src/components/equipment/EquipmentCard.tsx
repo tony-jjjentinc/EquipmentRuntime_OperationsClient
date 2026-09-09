@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Equipment, RoutineLog, DowntimeLog } from '../../types';
+import { Equipment, RuntimeLog } from '../../types';
 import { useEquipmentStore } from '../../store/useEquipmentStore';
 import { useUIStore } from '../../store/useUIStore';
 import { getEquipmentState } from '../../services/equipmentStateService';
@@ -13,7 +13,7 @@ interface EquipmentCardProps {
 }
 
 export const EquipmentCard: React.FC<EquipmentCardProps> = ({ equipment }) => {
-  const { schedules, overrideSchedules, routineLogs, downtimeLogs } = useEquipmentStore();
+  const { schedules, overrideSchedules, runtimeLogs } = useEquipmentStore();
   const { openRoutineModal, openDowntimeModal, openTimelineModal } = useUIStore();
 
   const [hasPendingOutbox, setHasPendingOutbox] = useState<boolean>(false);
@@ -22,7 +22,7 @@ export const EquipmentCard: React.FC<EquipmentCardProps> = ({ equipment }) => {
   const commonName = equipment["Common Name"] || tag;
 
   // Derive operational state
-  const opState = getEquipmentState(equipment, downtimeLogs, routineLogs, schedules, overrideSchedules);
+  const opState = getEquipmentState(equipment, runtimeLogs, schedules, overrideSchedules);
   const scheduleMeta = resolveScheduleMetadata(equipment, schedules, overrideSchedules);
 
   // Check if this equipment has pending outbox actions
@@ -46,17 +46,17 @@ export const EquipmentCard: React.FC<EquipmentCardProps> = ({ equipment }) => {
       isMounted = false;
       clearInterval(interval);
     };
-  }, [tag, routineLogs, downtimeLogs]);
+  }, [tag, runtimeLogs]);
 
   // Elapsed duration calculations
   let elapsedText = '';
   if (opState.state === 'Running') {
-    const routineLog = opState.log as RoutineLog;
+    const routineLog = opState.log as RuntimeLog;
     const startedAt = routineLog ? routineLog["Started At"] : '';
     elapsedText = startedAt ? `Running for ${calculateElapsedSince(startedAt)}` : 'Running';
   } else if (opState.subState === 'Downtime') {
-    const dLog = opState.log as DowntimeLog;
-    const shutAt = dLog ? dLog["Shutdown At"] : '';
+    const dLog = opState.log as RuntimeLog;
+    const shutAt = dLog ? (dLog["Started At"] || dLog["Shutdown At"]) : '';
     elapsedText = shutAt ? `Down for ${calculateElapsedSince(shutAt)}` : 'Outage';
   } else {
     elapsedText = 'Off';

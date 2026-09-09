@@ -7,12 +7,12 @@ import { ProcessedPhoto } from '../../services/cameraService';
 import { getFormattedDate, get24HourTime } from '../../services/timeService';
 import { queueOutboxAction, queuePhotoBlob } from '../../db/outbox';
 import { drainOutboxQueue } from '../../services/syncEngine';
-import { RoutineLog } from '../../types';
+import { RuntimeLog } from '../../types';
 
 export const RoutineModal: React.FC = () => {
   const { selectedEquipment, routineAction, showRoutineModal, closeRoutineModal } = useUIStore();
   const { user, token } = useAuthStore();
-  const { appConfig, optimisticAddRoutineLog } = useEquipmentStore();
+  const { appConfig, optimisticAddRuntimeLog } = useEquipmentStore();
 
   const [remarks, setRemarks] = useState('');
   const [photoData, setPhotoData] = useState<ProcessedPhoto | null>(null);
@@ -34,29 +34,36 @@ export const RoutineModal: React.FC = () => {
     const todayFormatted = getFormattedDate();
     const timeNow = get24HourTime();
 
-    const routineLog: RoutineLog = {
+    const runtimeLog: RuntimeLog = {
       "Transaction ID": txId,
       transactionId: txId,
       "System": selectedEquipment["System"] || "",
       "Component": selectedEquipment["Component"] || "",
       "Tagging Number": tag,
+      taggingNumber: tag,
       "Common Name": commonName,
       "Logged Date": todayFormatted,
+      LoggedDate: todayFormatted,
+      "Activity Category": 'Routine',
+      activityCategory: 'Routine',
+      "Activity State": routineAction === 'Startup' ? 'Running' : 'Completed',
+      activityState: routineAction === 'Startup' ? 'Running' : 'Completed',
       "Action": routineAction,
       "Started At": routineAction === 'Startup' ? timeNow : '',
       "Shutdown At": routineAction === 'Shutdown' ? timeNow : '',
       "Started By": routineAction === 'Startup' ? operatorEmail : '',
       "Shutdown By": routineAction === 'Shutdown' ? operatorEmail : '',
       "Schedule Context": selectedEquipment.scheduleContext || "Standard Routine",
-      "Startup On-Ground Remarks": routineAction === 'Startup' ? remarks : '',
+      "Start On-Ground Remarks": routineAction === 'Startup' ? remarks : '',
       "Shutdown On-Ground Remarks": routineAction === 'Shutdown' ? remarks : '',
-      "Startup Image Attachments": routineAction === 'Startup' && photoData ? 'data:image/jpeg;base64,' + photoData.base64 : '',
-      "Shutdown Image Attachments": routineAction === 'Shutdown' && photoData ? 'data:image/jpeg;base64,' + photoData.base64 : ''
+      "Start Image Attachments": routineAction === 'Startup' && photoData ? 'data:image/jpeg;base64,' + photoData.base64 : '',
+      "Shutdown Image Attachments": routineAction === 'Shutdown' && photoData ? 'data:image/jpeg;base64,' + photoData.base64 : '',
+      "Notes": ''
     };
 
     try {
       // 1. Optimistic Local State Update
-      await optimisticAddRoutineLog(routineLog);
+      await optimisticAddRuntimeLog(runtimeLog);
 
       // 2. Queue into Offline Outbox
       await queueOutboxAction({
@@ -68,7 +75,9 @@ export const RoutineModal: React.FC = () => {
         operatorName,
         clientTimestamp: new Date().toISOString(),
         payload: {
-          ...routineLog,
+          ...runtimeLog,
+          "Start Image Attachments": "",
+          "Shutdown Image Attachments": "",
           captureDateStr: photoData ? photoData.captureDateStr : '',
           captureTimeStr: photoData ? photoData.captureTimeStr : ''
         },

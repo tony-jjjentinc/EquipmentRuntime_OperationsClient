@@ -7,12 +7,12 @@ import { ProcessedPhoto } from '../../services/cameraService';
 import { getFormattedDate, get24HourTime } from '../../services/timeService';
 import { queueOutboxAction, queuePhotoBlob } from '../../db/outbox';
 import { drainOutboxQueue } from '../../services/syncEngine';
-import { DowntimeLog, RoutineLog } from '../../types';
+import { RuntimeLog } from '../../types';
 
 export const DowntimeModal: React.FC = () => {
   const { selectedEquipment, downtimeAction, showDowntimeModal, closeDowntimeModal } = useUIStore();
   const { user, token } = useAuthStore();
-  const { appConfig, shutdownTypes, routineLogs, optimisticAddDowntimeLog, optimisticRestartDowntime } = useEquipmentStore();
+  const { appConfig, shutdownTypes, optimisticAddRuntimeLog, optimisticRestartDowntime } = useEquipmentStore();
 
   const [shutdownType, setShutdownType] = useState('Unscheduled Maintenance');
   const [remarks, setRemarks] = useState('');
@@ -37,54 +37,38 @@ export const DowntimeModal: React.FC = () => {
 
     try {
       if (downtimeAction === 'Shutdown') {
-        const downtimeLog: DowntimeLog = {
+        const runtimeLog: RuntimeLog = {
           "Transaction ID": txId,
           transactionId: txId,
           "System": selectedEquipment["System"] || "",
           "Component": selectedEquipment["Component"] || "",
           "Tagging Number": tag,
+          taggingNumber: tag,
           "Common Name": commonName,
           "Logged Date": todayFormatted,
+          LoggedDate: todayFormatted,
+          "Activity Category": 'Downtime',
+          activityCategory: 'Downtime',
+          "Activity State": shutdownType,
+          activityState: shutdownType,
           "Action": "Shutdown",
-          "Shutdown At": timeNow,
-          "Restarted At": "",
-          "Shutdown Type": shutdownType,
-          "Shutdown Reason": shutdownType,
-          "Shutdown Reported By": operatorEmail,
-          "Shutdown On-Ground Remarks": remarks,
-          "Shutdown Image Attachments": photoData ? 'data:image/jpeg;base64,' + photoData.base64 : ''
+          "Started At": timeNow,
+          "Shutdown At": "",
+          "Duration (Minutes)": "",
+          "Started By": operatorEmail,
+          "Shutdown By": "",
+          "Schedule Context": selectedEquipment.scheduleContext || "Standard Routine",
+          "Start On-Ground Remarks": remarks,
+          "Shutdown On-Ground Remarks": "",
+          "Start Image Attachments": photoData ? 'data:image/jpeg;base64,' + photoData.base64 : '',
+          "Shutdown Image Attachments": '',
+          "Notes": ''
         };
 
-        // Check if routine log exists for today. If none, auto-create 0-runtime anchor
-        let autoRoutine: RoutineLog | undefined;
-        const hasRoutineToday = routineLogs.some(
-          l => (l["Tagging Number"] || l["Equipment ID"]) === tag
-        );
+        // 1. Optimistic Update (Clean-slate: Zero dummy routine anchor rows created)
+        await optimisticAddRuntimeLog(runtimeLog);
 
-        if (!hasRoutineToday) {
-          autoRoutine = {
-            "Transaction ID": txId,
-            transactionId: txId,
-            "System": selectedEquipment["System"] || "",
-            "Component": selectedEquipment["Component"] || "",
-            "Tagging Number": tag,
-            "Common Name": commonName,
-            "Logged Date": todayFormatted,
-            "Action": "Shutdown",
-            "Started At": timeNow,
-            "Shutdown At": timeNow,
-            "Started By": operatorEmail,
-            "Shutdown By": operatorEmail,
-            "Schedule Context": selectedEquipment.scheduleContext || "Standard Routine",
-            "Estimated Operational Time": 0,
-            "Shutdown On-Ground Remarks": `[Auto-Created on Downtime Shutdown] ${remarks}`.trim()
-          };
-        }
-
-        // 1. Optimistic Update
-        await optimisticAddDowntimeLog(downtimeLog, autoRoutine);
-
-        // 2. Queue into Offline Outbox
+        // 2. Queue into Offline Outbox (Defensively strip base64 from payload)
         await queueOutboxAction({
           id: txId,
           actionType: 'Downtime',
@@ -94,17 +78,21 @@ export const DowntimeModal: React.FC = () => {
           operatorName,
           clientTimestamp: new Date().toISOString(),
           payload: {
-            ...downtimeLog,
+            ...runtimeLog,
+            "Start Image Attachments": "",
+            "Shutdown Image Attachments": "",
             captureDateStr: photoData ? photoData.captureDateStr : '',
             captureTimeStr: photoData ? photoData.captureTimeStr : ''
           },
           hasPhoto: !!photoData
         });
       } else if (downtimeAction === 'Restart') {
-        // 1. Optimistic Restart
-        await optimisticRestartDowntime(tag, timeNow, operatorEmail, remarks);
+        const photoUrl = photoData ? 'data:image/jpeg;base64,' + photoData.base64 : '';
 
-        // 2. Queue into Offline Outbox
+        // 1. Optimistic Restart
+        await optimisticRestartDowntime(tag, timeNow, operatorEmail, remarks, photoUrl);
+
+        // 2. Queue into Offline Outbox (Defensively strip base64 from payload)
         await queueOutboxAction({
           id: txId,
           actionType: 'Restart',
@@ -116,12 +104,14 @@ export const DowntimeModal: React.FC = () => {
           payload: {
             "Action": "Restart",
             "Tagging Number": tag,
-            "Restarted At": timeNow,
-            "Restarted By": operatorEmail,
-            "Restart On-Ground Remarks": remarks,
-            "Restart Image Attachments": photoData ? 'data:image/jpeg;base64,' + photoData.base64 : '',
+            "Shutdown At": timeNow,
+            "Shutdown By": operatorEmail,
+            "Shutdown On-Ground Remarks": remarks,
+            "Shutdown Image Attachments": "",
             captureDateStr: photoData ? photoData.captureDateStr : '',
-            captureTimeStr: photoData ? photoData.captureTimeStr : ''
+            captureTimeStr: photoData ? photoData.captureTimeStr : '',
+            "Activity Category": 'Downtime',
+            "Activity State": 'Completed'
           },
           hasPhoto: !!photoData
         });

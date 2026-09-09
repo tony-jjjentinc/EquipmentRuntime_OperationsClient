@@ -3,8 +3,7 @@ import {
   Equipment,
   Schedule,
   OverrideSchedule,
-  RoutineLog,
-  DowntimeLog,
+  RuntimeLog,
   EquipmentAssignment,
   HistoryLog
 } from '../types';
@@ -23,8 +22,7 @@ interface EquipmentStore {
   equipment: Equipment[];
   schedules: Schedule[];
   overrideSchedules: OverrideSchedule[];
-  routineLogs: RoutineLog[];
-  downtimeLogs: DowntimeLog[];
+  runtimeLogs: RuntimeLog[];
   historyLogs: HistoryLog[];
   equipmentAssignments: EquipmentAssignment[];
   shutdownTypes: string[];
@@ -36,17 +34,15 @@ interface EquipmentStore {
 
   loadInitialData: (token: string) => Promise<void>;
   hydrateDataSilently: (token: string) => Promise<void>;
-  optimisticAddRoutineLog: (log: RoutineLog) => Promise<void>;
-  optimisticAddDowntimeLog: (dLog: DowntimeLog, autoRoutine?: RoutineLog) => Promise<void>;
-  optimisticRestartDowntime: (tag: string, restartTime: string, operator: string, remarks?: string) => Promise<void>;
+  optimisticAddRuntimeLog: (log: RuntimeLog) => Promise<void>;
+  optimisticRestartDowntime: (tag: string, restartTime: string, operator: string, remarks?: string, shutdownImage?: string) => Promise<void>;
 }
 
 export const useEquipmentStore = create<EquipmentStore>((set, get) => ({
   equipment: [],
   schedules: [],
   overrideSchedules: [],
-  routineLogs: [],
-  downtimeLogs: [],
+  runtimeLogs: [],
   historyLogs: [],
   equipmentAssignments: [],
   shutdownTypes: ['Scheduled Maintenance', 'Unscheduled Maintenance', 'Operational Hold', 'Power Outage'],
@@ -67,23 +63,20 @@ export const useEquipmentStore = create<EquipmentStore>((set, get) => ({
     let cachedEq: Equipment[] = [];
     let cachedSched: Schedule[] = [];
     let cachedOv: OverrideSchedule[] = [];
-    let cachedRoutine: RoutineLog[] = [];
-    let cachedDowntime: DowntimeLog[] = [];
+    let cachedRuntime: RuntimeLog[] = [];
 
     try {
       cachedEq = await db.equipment.toArray();
       cachedSched = await db.schedules.toArray();
       cachedOv = await db.overrides.toArray();
-      cachedRoutine = await db.routineLogs.toArray();
-      cachedDowntime = await db.downtimeLogs.toArray();
+      cachedRuntime = await db.runtimeLogs.toArray();
 
       if (cachedEq.length > 0) {
         set({
           equipment: cachedEq,
           schedules: cachedSched,
           overrideSchedules: cachedOv,
-          routineLogs: cachedRoutine,
-          downtimeLogs: cachedDowntime,
+          runtimeLogs: cachedRuntime,
           isLoading: false
         });
       } else {
@@ -117,20 +110,17 @@ export const useEquipmentStore = create<EquipmentStore>((set, get) => ({
           taggingNumber: o['Tagging Number'] || o['Equipment ID'] || ''
         }));
 
-        const routines = (data.routineLogs || []).map((r: any, idx: number) => ({
+        const rawLogs = data.runtimeLogs || data.routineLogs || [];
+        const runtimes: RuntimeLog[] = rawLogs.map((r: any, idx: number) => ({
           ...r,
-          id: r['Transaction ID'] || r.transactionId || `r-${idx}`,
-          transactionId: r['Transaction ID'] || r.transactionId || `r-${idx}`,
+          id: r['Transaction ID'] || r.transactionId || `rt-${idx}`,
+          transactionId: r['Transaction ID'] || r.transactionId || `rt-${idx}`,
           taggingNumber: r['Tagging Number'] || r['Equipment ID'] || '',
-          LoggedDate: r['Logged Date'] || ''
-        }));
-
-        const downtimes = (data.downtimeLogs || []).map((d: any, idx: number) => ({
-          ...d,
-          id: d['Transaction ID'] || d.transactionId || `d-${idx}`,
-          transactionId: d['Transaction ID'] || d.transactionId || `d-${idx}`,
-          taggingNumber: d['Tagging Number'] || d['Equipment ID'] || '',
-          LoggedDate: d['Logged Date'] || ''
+          LoggedDate: r['Logged Date'] || '',
+          "Activity Category": r['Activity Category'] || r.activityCategory || 'Routine',
+          activityCategory: r['Activity Category'] || r.activityCategory || 'Routine',
+          "Activity State": r['Activity State'] || r.activityState || 'Running',
+          activityState: r['Activity State'] || r.activityState || 'Running'
         }));
 
         const hist = data.historyLogs || [];
@@ -141,8 +131,7 @@ export const useEquipmentStore = create<EquipmentStore>((set, get) => ({
           equipment: enrichedEq,
           schedules: scheds,
           overrideSchedules: overrides,
-          routineLogs: routines,
-          downtimeLogs: downtimes,
+          runtimeLogs: runtimes,
           historyLogs: hist,
           equipmentAssignments: assignments,
           shutdownTypes: shutTypes,
@@ -166,10 +155,8 @@ export const useEquipmentStore = create<EquipmentStore>((set, get) => ({
           await db.schedules.bulkPut(scheds);
           await db.overrides.clear();
           await db.overrides.bulkPut(overrides);
-          await db.routineLogs.clear();
-          await db.routineLogs.bulkPut(routines);
-          await db.downtimeLogs.clear();
-          await db.downtimeLogs.bulkPut(downtimes);
+          await db.runtimeLogs.clear();
+          await db.runtimeLogs.bulkPut(runtimes);
         } catch (cacheErr) {
           console.warn('Dexie cache write warning:', cacheErr);
         }
@@ -190,12 +177,65 @@ export const useEquipmentStore = create<EquipmentStore>((set, get) => ({
     try {
       const data = await callGasApi<any>('getInitialData', {}, token);
       if (data) {
+        const rawLogs = data.runtimeLogs || data.routineLogs;
+        let freshLogs: RuntimeLog[] = rawLogs ? rawLogs.map((r: any, idx: number) => ({
+          ...r,
+          id: r['Transaction ID'] || r.transactionId || `rt-${idx}`,
+          transactionId: r['Transaction ID'] || r.transactionId || `rt-${idx}`,
+          taggingNumber: r['Tagging Number'] || r['Equipment ID'] || '',
+          LoggedDate: r['Logged Date'] || '',
+          "Activity Category": r['Activity Category'] || r.activityCategory || 'Routine',
+          activityCategory: r['Activity Category'] || r.activityCategory || 'Routine',
+          "Activity State": r['Activity State'] || r.activityState || 'Running',
+          activityState: r['Activity State'] || r.activityState || 'Running'
+        })) : [...get().runtimeLogs];
+
+        // FIX-11: Overlay local in-flight outbox actions that have not yet landed in remote Google Sheets
+        try {
+          const pendingItems = await db.outbox.where('status').anyOf('PENDING', 'SYNCING').toArray();
+          for (const item of pendingItems) {
+            const txId = item.id;
+            const alreadyInRemote = freshLogs.some((l: any) => (l['Transaction ID'] || l.transactionId) === txId);
+            if (!alreadyInRemote && item.payload) {
+              const p = item.payload;
+              if (item.actionType === 'Restart') {
+                const tag = item.taggingNumber;
+                const dtIdx = freshLogs.findIndex((l: any) =>
+                  (l['Tagging Number'] === tag || l.taggingNumber === tag) &&
+                  l['Activity Category'] === 'Downtime' &&
+                  !l['Shutdown At']
+                );
+                if (dtIdx !== -1) {
+                  freshLogs[dtIdx] = {
+                    ...freshLogs[dtIdx],
+                    "Shutdown At": p["Shutdown At"] || '',
+                    "Activity State": 'Completed'
+                  };
+                }
+              } else {
+                freshLogs.push({
+                  ...p,
+                  id: txId,
+                  transactionId: txId,
+                  taggingNumber: item.taggingNumber,
+                  "Tagging Number": item.taggingNumber,
+                  "Activity Category": p["Activity Category"] || (item.actionType === 'Downtime' ? 'Downtime' : 'Routine'),
+                  "Activity State": p["Activity State"] || (item.actionType === 'Startup' ? 'Running' : 'Completed'),
+                  "Logged Date": p["Logged Date"] || p.LoggedDate || '',
+                  LoggedDate: p["Logged Date"] || p.LoggedDate || ''
+                } as RuntimeLog);
+              }
+            }
+          }
+        } catch (dbErr) {
+          console.warn('Could not overlay outbox items during silent hydration:', dbErr);
+        }
+
         set({
           equipment: data.equipment || get().equipment,
           schedules: data.schedules || get().schedules,
           overrideSchedules: data.overrideSchedules || get().overrideSchedules,
-          routineLogs: data.routineLogs || get().routineLogs,
-          downtimeLogs: data.downtimeLogs || get().downtimeLogs,
+          runtimeLogs: freshLogs,
           historyLogs: data.historyLogs || get().historyLogs,
           lastHydrated: new Date(),
           isHydrating: false
@@ -206,8 +246,8 @@ export const useEquipmentStore = create<EquipmentStore>((set, get) => ({
     }
   },
 
-  optimisticAddRoutineLog: async (log: RoutineLog) => {
-    const normalizedLog = {
+  optimisticAddRuntimeLog: async (log: RuntimeLog) => {
+    const normalizedLog: RuntimeLog = {
       ...log,
       taggingNumber: log["Tagging Number"] || log["Equipment ID"] || log.taggingNumber || '',
       transactionId: log["Transaction ID"] || log.transactionId || crypto.randomUUID(),
@@ -215,107 +255,82 @@ export const useEquipmentStore = create<EquipmentStore>((set, get) => ({
     };
 
     set(state => {
-      const updated = state.routineLogs.filter(
-        l => (l["Tagging Number"] || l["Equipment ID"]) !== normalizedLog.taggingNumber
+      const existingIdx = state.runtimeLogs.findIndex(
+        l => (l["Transaction ID"] || l.transactionId) === normalizedLog.transactionId
       );
-      return { routineLogs: [...updated, normalizedLog] };
+      if (existingIdx !== -1) {
+        const updated = [...state.runtimeLogs];
+        updated[existingIdx] = { ...updated[existingIdx], ...normalizedLog };
+        return { runtimeLogs: updated };
+      }
+      return { runtimeLogs: [...state.runtimeLogs, normalizedLog] };
     });
 
     try {
-      await db.routineLogs.put(normalizedLog);
+      await db.runtimeLogs.put(normalizedLog);
     } catch (err) {
-      console.warn('Dexie optimisticAddRoutineLog notice:', err);
+      console.warn('Dexie optimisticAddRuntimeLog notice:', err);
     }
   },
 
-  optimisticAddDowntimeLog: async (dLog: DowntimeLog, autoRoutine?: RoutineLog) => {
-    const normalizedDLog = {
-      ...dLog,
-      taggingNumber: dLog["Tagging Number"] || dLog["Equipment ID"] || dLog.taggingNumber || '',
-      transactionId: dLog["Transaction ID"] || dLog.transactionId || crypto.randomUUID(),
-      LoggedDate: dLog["Logged Date"] || ''
-    };
+  optimisticRestartDowntime: async (tag: string, restartTime: string, operator: string, remarks?: string, shutdownImage?: string) => {
+    const todayFormatted = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 
-    let normalizedAutoRoutine: RoutineLog | undefined;
-    if (autoRoutine) {
-      normalizedAutoRoutine = {
-        ...autoRoutine,
-        taggingNumber: autoRoutine["Tagging Number"] || autoRoutine["Equipment ID"] || autoRoutine.taggingNumber || '',
-        transactionId: autoRoutine["Transaction ID"] || autoRoutine.transactionId || crypto.randomUUID(),
-        LoggedDate: autoRoutine["Logged Date"] || ''
-      };
-    }
-
-    set(state => {
-      const newDowntimes = [...state.downtimeLogs, normalizedDLog];
-      let newRoutines = state.routineLogs;
-      if (normalizedAutoRoutine) {
-        const hasToday = state.routineLogs.some(
-          l => (l["Tagging Number"] || l["Equipment ID"]) === normalizedAutoRoutine!.taggingNumber
-        );
-        if (!hasToday) {
-          newRoutines = [...state.routineLogs, normalizedAutoRoutine];
-        }
-      }
-      return { downtimeLogs: newDowntimes, routineLogs: newRoutines };
-    });
-
-    try {
-      await db.downtimeLogs.put(normalizedDLog);
-      if (normalizedAutoRoutine) {
-        await db.routineLogs.put(normalizedAutoRoutine);
-      }
-    } catch (err) {
-      console.warn('Dexie optimisticAddDowntimeLog notice:', err);
-    }
-  },
-
-  optimisticRestartDowntime: async (tag: string, restartTime: string, operator: string, remarks?: string) => {
     set(state => {
       // 1. Close open downtime log
-      const updatedDowntimes = state.downtimeLogs.map(log => {
-        if ((log["Tagging Number"] === tag || log["Equipment ID"] === tag) && !log["Restarted At"]) {
+      const updated = state.runtimeLogs.map(log => {
+        const isMatch = (log["Tagging Number"] === tag || log["Equipment ID"] === tag || log.taggingNumber === tag);
+        const isDowntime = (log["Activity Category"] === 'Downtime' || log.activityCategory === 'Downtime');
+        const isOpen = !log["Shutdown At"] && !log["Restarted At"];
+        if (isMatch && isDowntime && isOpen) {
           return {
             ...log,
-            "Restarted At": restartTime,
-            "Restarted By": operator,
-            "Restart On-Ground Remarks": remarks || ''
+            "Shutdown At": restartTime,
+            "Shutdown By": operator,
+            "Shutdown On-Ground Remarks": remarks || '',
+            "Shutdown Image Attachments": shutdownImage || '',
+            "Activity State": 'Completed',
+            activityState: 'Completed'
           };
         }
         return log;
       });
 
-      // 2. If routine log was 0-runtime anchor, convert to active startup
-      const updatedRoutines = state.routineLogs.map(r => {
-        if (r["Tagging Number"] === tag || r["Equipment ID"] === tag) {
-          if (r["Started At"] && r["Shutdown At"] && r["Started At"] === r["Shutdown At"]) {
-            return {
-              ...r,
-              "Action": "Startup",
-              "Started At": restartTime,
-              "Shutdown At": "",
-              "Started By": operator,
-              "Shutdown By": "",
-              "Estimated Operational Time": ""
-            };
-          }
-        }
-        return r;
-      });
+      // 2. Append optimistic resumed routine log
+      const resumedTxId = crypto.randomUUID();
+      const resumedLog: RuntimeLog = {
+        "Transaction ID": resumedTxId,
+        transactionId: resumedTxId,
+        "Logged Date": todayFormatted,
+        LoggedDate: todayFormatted,
+        "Tagging Number": tag,
+        taggingNumber: tag,
+        "Activity Category": 'Routine',
+        activityCategory: 'Routine',
+        "Activity State": 'Running',
+        activityState: 'Running',
+        "Started At": restartTime,
+        "Started By": operator,
+        "Shutdown At": '',
+        "Shutdown By": '',
+        "Start On-Ground Remarks": `[Resumed after Downtime Outage] ${remarks || ''}`.trim(),
+        Action: 'Startup'
+      };
 
-      return { downtimeLogs: updatedDowntimes, routineLogs: updatedRoutines };
+      return { runtimeLogs: [...updated, resumedLog] };
     });
 
-    // Update Dexie using the valid index 'taggingNumber'
     try {
-      const openD = await db.downtimeLogs.where('taggingNumber').equals(tag).toArray();
-      for (const d of openD) {
-        if (!d["Restarted At"]) {
-          await db.downtimeLogs.put({
+      const openLogs = await db.runtimeLogs.where('taggingNumber').equals(tag).toArray();
+      for (const d of openLogs) {
+        if ((d["Activity Category"] === 'Downtime' || d.activityCategory === 'Downtime') && !d["Shutdown At"] && !d["Restarted At"]) {
+          await db.runtimeLogs.put({
             ...d,
-            "Restarted At": restartTime,
-            "Restarted By": operator,
-            "Restart On-Ground Remarks": remarks || ''
+            "Shutdown At": restartTime,
+            "Shutdown By": operator,
+            "Shutdown On-Ground Remarks": remarks || '',
+            "Activity State": 'Completed',
+            activityState: 'Completed'
           });
         }
       }
