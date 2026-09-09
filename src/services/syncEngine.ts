@@ -73,7 +73,7 @@ async function _executeDrainQueue(token: string): Promise<SyncResult> {
           const photo = await getPhotoBlob(item.id);
           if (photo && photo.blob) {
             const base64 = await blobToBase64(photo.blob);
-            const attachCol = (item.actionType === 'Startup' || item.actionType === 'Restart')
+            const attachCol = (item.actionType === 'Startup' || item.actionType === 'Downtime')
               ? 'Start Image Attachments'
               : 'Shutdown Image Attachments';
 
