@@ -1,50 +1,52 @@
 import React from 'react';
+import { Badge } from '../ui/badge';
 import { OperationalState, OperationalSubState } from '../../types';
+import { Play, AlertTriangle, Power, RefreshCw } from 'lucide-react';
 
-interface BadgeProps {
+interface OperationalBadgeProps {
   state: OperationalState;
   subState: OperationalSubState;
   reason?: string;
   isPendingSync?: boolean;
 }
 
-export const OperationalBadge: React.FC<BadgeProps> = ({
+export const OperationalBadge: React.FC<OperationalBadgeProps> = ({
   state,
   subState,
   reason,
-  isPendingSync
+  isPendingSync = false
 }) => {
   if (isPendingSync) {
     return (
-      <span className="badge badge-pending-sync d-inline-flex align-items-center gap-1 shadow-sm px-2 py-1">
-        <span className="spinner-grow spinner-grow-sm" role="status" style={{ width: '0.65rem', height: '0.65rem' }}></span>
-        <span>Pending Sync</span>
-      </span>
+      <Badge variant="pending" className="gap-1 shadow-xs">
+        <RefreshCw className="w-3 h-3 animate-spin text-amber-600" />
+        <span>Syncing...</span>
+      </Badge>
     );
   }
 
-  if (state === 'Running') {
+  if (state === 'Running' || subState === 'Running') {
     return (
-      <span className="badge badge-running d-inline-flex align-items-center gap-1 shadow-sm px-2 py-1">
-        <i className="bi bi-check-circle-fill text-success"></i>
+      <Badge variant="running" className="gap-1 shadow-xs">
+        <Play className="w-3 h-3 fill-emerald-600 text-emerald-600" />
         <span>Running</span>
-      </span>
+      </Badge>
     );
   }
 
   if (subState === 'Downtime') {
     return (
-      <span className="badge badge-downtime d-inline-flex align-items-center gap-1 shadow-sm px-2 py-1">
-        <i className="bi bi-exclamation-triangle-fill text-danger"></i>
-        <span>{reason || 'Downtime'}</span>
-      </span>
+      <Badge variant="downtime" className="gap-1 shadow-xs">
+        <AlertTriangle className="w-3 h-3 text-rose-600" />
+        <span className="truncate max-w-[120px]">{reason || 'Downtime'}</span>
+      </Badge>
     );
   }
 
   return (
-    <span className="badge badge-off d-inline-flex align-items-center gap-1 shadow-sm px-2 py-1">
-      <i className="bi bi-power text-secondary"></i>
-      <span>Not Running (Off)</span>
-    </span>
+    <Badge variant="off" className="gap-1 shadow-xs">
+      <Power className="w-3 h-3 text-slate-500" />
+      <span>Off</span>
+    </Badge>
   );
 };

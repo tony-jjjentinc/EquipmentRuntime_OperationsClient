@@ -2,6 +2,9 @@ import React, { useMemo } from 'react';
 import { useEquipmentStore } from '../../store/useEquipmentStore';
 import { useUIStore } from '../../store/useUIStore';
 import { useAuthStore } from '../../store/useAuthStore';
+import { Card } from '../ui/card';
+import { Button } from '../ui/button';
+import { Clock, Image as ImageIcon, User, Inbox, Play, Power, AlertTriangle, RotateCw } from 'lucide-react';
 
 export const ActivityHistoryFeed: React.FC = () => {
   const { historyLogs } = useEquipmentStore();
@@ -18,7 +21,7 @@ export const ActivityHistoryFeed: React.FC = () => {
 
   const userEmail = user?.email || '';
 
-  // Calculate Action Counts
+  // Action counts
   const actionCounts = useMemo(() => {
     const counts: Record<string, number> = { All: historyLogs.length };
     historyLogs.forEach(log => {
@@ -28,7 +31,7 @@ export const ActivityHistoryFeed: React.FC = () => {
     return counts;
   }, [historyLogs]);
 
-  // Extract unique systems
+  // Unique systems
   const uniqueSystems = useMemo(() => {
     return Array.from(new Set(historyLogs.map(l => l.raw?.["System"]).filter(Boolean))) as string[];
   }, [historyLogs]);
@@ -36,18 +39,15 @@ export const ActivityHistoryFeed: React.FC = () => {
   // Filtered logs
   const filteredLogs = useMemo(() => {
     return historyLogs.filter(log => {
-      // 1. Action Filter
       const normalizedAction = log.action === 'Shutdown' && log.type === 'Downtime' ? 'Report Downtime' : log.action;
       if (historyFilterAction !== 'All' && normalizedAction !== historyFilterAction) {
         return false;
       }
 
-      // 2. System Filter
       if (historySystemFilter !== 'All' && log.raw?.["System"] !== historySystemFilter) {
         return false;
       }
 
-      // 3. My Actions Only
       if (historyMyActionsOnly && userEmail) {
         const reportedBy = (log.reportedBy || '').toLowerCase();
         if (!reportedBy.includes(userEmail.toLowerCase())) {
@@ -60,9 +60,9 @@ export const ActivityHistoryFeed: React.FC = () => {
   }, [historyLogs, historyFilterAction, historySystemFilter, historyMyActionsOnly, userEmail]);
 
   return (
-    <div className="mb-4">
+    <div className="space-y-3 mb-8">
       {/* Tier 2: Action Type Filter Pills */}
-      <div className="d-flex overflow-auto no-scrollbar gap-2 mb-2 pb-1" style={{ whiteSpace: 'nowrap' }}>
+      <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5">
         {['All', 'Startup', 'Shutdown', 'Report Downtime', 'Restart'].map(act => {
           const isActive = historyFilterAction === act;
           const count = actionCounts[act] || 0;
@@ -70,16 +70,17 @@ export const ActivityHistoryFeed: React.FC = () => {
             <button
               key={act}
               type="button"
-              className={`btn btn-sm d-inline-flex align-items-center rounded-pill px-3 shadow-sm ${
-                isActive ? 'btn-primary text-white fw-bold' : 'btn-light border text-secondary'
+              className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
+                isActive
+                  ? 'border-primary bg-primary text-white shadow-xs'
+                  : 'border-border bg-background hover:bg-accent text-muted-foreground'
               }`}
               onClick={() => setHistoryFilterAction(act)}
-              style={{ fontSize: '0.75rem' }}
             >
               <span>{act}</span>
               <span
-                className={`badge rounded-pill ms-1 ${
-                  isActive ? 'bg-white bg-opacity-25 text-white' : 'bg-secondary bg-opacity-10 text-secondary'
+                className={`rounded-full px-1.5 text-[10px] font-bold ${
+                  isActive ? 'bg-white/20 text-white' : 'bg-muted text-muted-foreground'
                 }`}
               >
                 {count}
@@ -90,108 +91,125 @@ export const ActivityHistoryFeed: React.FC = () => {
       </div>
 
       {/* Tier 3: System Filter Pills & My Actions Toggle */}
-      <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-        <div className="d-flex gap-2 overflow-auto no-scrollbar py-1" style={{ whiteSpace: 'nowrap' }}>
+      <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
           <button
             type="button"
-            className={`btn btn-sm d-inline-flex align-items-center rounded-pill px-3 shadow-sm ${
-              historySystemFilter === 'All' ? 'btn-primary text-white fw-bold' : 'btn-light border text-secondary'
+            className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium whitespace-nowrap transition-colors cursor-pointer ${
+              historySystemFilter === 'All'
+                ? 'border-primary bg-primary text-white shadow-xs'
+                : 'border-border bg-background hover:bg-accent text-muted-foreground'
             }`}
             onClick={() => setHistorySystemFilter('All')}
-            style={{ fontSize: '0.75rem' }}
           >
-            <span>All Systems</span>
+            All Systems
           </button>
           {uniqueSystems.map(sys => (
             <button
               key={sys}
               type="button"
-              className={`btn btn-sm d-inline-flex align-items-center rounded-pill px-3 shadow-sm ${
-                historySystemFilter === sys ? 'btn-primary text-white fw-bold' : 'btn-light border text-secondary'
+              className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium whitespace-nowrap transition-colors cursor-pointer ${
+                historySystemFilter === sys
+                  ? 'border-primary bg-primary text-white shadow-xs'
+                  : 'border-border bg-background hover:bg-accent text-muted-foreground'
               }`}
               onClick={() => setHistorySystemFilter(sys)}
-              style={{ fontSize: '0.75rem' }}
             >
-              <span>{sys}</span>
+              {sys}
             </button>
           ))}
         </div>
 
         {/* My Actions Toggle */}
-        <div className="form-check form-switch m-0 d-flex align-items-center gap-1 ms-auto">
+        <label className="flex items-center gap-2 text-xs font-semibold text-foreground cursor-pointer select-none">
           <input
-            className="form-check-input shadow-none cursor-pointer"
             type="checkbox"
-            id="myActionsToggle"
             checked={historyMyActionsOnly}
             onChange={e => setHistoryMyActionsOnly(e.target.checked)}
+            className="h-4 w-4 rounded border-border text-primary focus:ring-primary/30"
           />
-          <label className="form-check-label extra-small fw-semibold text-dark cursor-pointer text-nowrap" htmlFor="myActionsToggle">
-            My Actions Only
-          </label>
-        </div>
+          <span>My Actions Only</span>
+        </label>
       </div>
 
-      {/* Feed Cards */}
+      {/* History Feed Cards */}
       {filteredLogs.length === 0 ? (
-        <div className="card border-dashed p-5 text-center bg-white rounded-4 shadow-sm my-3">
-          <i className="bi bi-clock-history fs-1 text-muted mb-2"></i>
-          <h6 className="fw-bold text-dark">No Events Match Filter</h6>
-          <p className="text-muted extra-small mb-0">Try clearing filters or changing selection.</p>
+        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-card p-12 text-center shadow-xs my-4 space-y-2">
+          <Inbox className="h-8 w-8 text-muted-foreground" />
+          <h4 className="font-bold text-sm text-foreground">No Events Match Filter</h4>
+          <p className="text-xs text-muted-foreground">Try clearing filters or changing selection.</p>
         </div>
       ) : (
-        <div className="d-flex flex-column gap-2">
+        <div className="space-y-2.5">
           {filteredLogs.map((log, index) => {
             const isStartup = log.action === 'Startup';
             const isShutdown = log.action === 'Shutdown';
-            const isDowntime = log.action === 'Report Downtime' || (log.action === 'Shutdown' && log.type === 'Downtime');
+            const isDowntime =
+              log.action === 'Report Downtime' ||
+              (log.action === 'Shutdown' && log.type === 'Downtime');
             const isRestart = log.action === 'Restart';
 
-            let actionBadgeClass = 'bg-secondary text-white';
-            if (isStartup) actionBadgeClass = 'bg-success text-white';
-            else if (isShutdown) actionBadgeClass = 'bg-dark text-white';
-            else if (isDowntime) actionBadgeClass = 'bg-danger text-white';
-            else if (isRestart) actionBadgeClass = 'bg-warning text-dark';
+            let badgeClass = 'bg-slate-100 text-slate-700 border-slate-200';
+            let Icon = Clock;
+
+            if (isStartup) {
+              badgeClass = 'bg-emerald-100 text-emerald-800 border-emerald-300';
+              Icon = Play;
+            } else if (isRestart) {
+              badgeClass = 'bg-amber-100 text-amber-800 border-amber-300';
+              Icon = RotateCw;
+            } else if (isDowntime) {
+              badgeClass = 'bg-rose-100 text-rose-800 border-rose-300';
+              Icon = AlertTriangle;
+            } else if (isShutdown) {
+              badgeClass = 'bg-slate-800 text-white border-slate-700';
+              Icon = Power;
+            }
 
             return (
-              <div key={index} className="card shadow-sm border rounded-3 p-3 bg-white">
-                <div className="d-flex justify-content-between align-items-start mb-2">
-                  <div className="d-flex align-items-center gap-2">
-                    <span className={`badge ${actionBadgeClass} extra-small px-2 py-1`}>
-                      {log.action}
+              <Card key={index} className="p-3.5 space-y-2 shadow-xs bg-card">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-bold ${badgeClass}`}>
+                      <Icon className="h-3 w-3" />
+                      <span>{log.action}</span>
                     </span>
-                    <strong className="text-dark small">{log.commonName}</strong>
-                    <span className="badge bg-light text-secondary border font-monospace extra-small">
+                    <strong className="text-sm font-bold text-foreground">{log.commonName}</strong>
+                    <span className="inline-flex items-center rounded-md border border-border bg-muted/60 px-1.5 py-0.2 font-mono text-[11px] text-muted-foreground">
                       {log.tagNumber}
                     </span>
                   </div>
-                  <span className="text-muted extra-small">
+                  <span className="text-xs text-muted-foreground whitespace-nowrap">
                     {log.date} · {log.time}
                   </span>
                 </div>
 
-                <div className="d-flex justify-content-between align-items-center extra-small text-muted">
-                  <div>
-                    <span>Reported by: </span>
-                    <strong className="text-secondary">{log.reportedBy || 'Unknown'}</strong>
+                <div className="flex items-center justify-between text-xs text-muted-foreground pt-1 border-t border-border/60">
+                  <div className="flex items-center gap-1 truncate">
+                    <User className="h-3 w-3" />
+                    <span>Reported by:</span>
+                    <strong className="text-foreground">{log.reportedBy || 'Unknown'}</strong>
                   </div>
                   {log.imageUrl && (
-                    <button
+                    <Button
                       type="button"
-                      className="btn btn-sm btn-outline-primary extra-small py-0 px-2 rounded-pill shadow-none"
+                      variant="outline"
+                      size="sm"
+                      className="h-6 text-[11px] gap-1 px-2 cursor-pointer"
                       onClick={() => openImagePreview(log.imageUrl!)}
                     >
-                      <i className="bi bi-image me-1"></i> View Photo
-                    </button>
+                      <ImageIcon className="h-3 w-3 text-primary" />
+                      <span>View Photo</span>
+                    </Button>
                   )}
                 </div>
 
                 {log.remarks && (
-                  <div className="small text-secondary bg-light rounded p-2 border mt-2">
+                  <div className="rounded-md border border-border/80 bg-muted/40 p-2 text-xs italic text-foreground">
                     "{log.remarks}"
                   </div>
                 )}
-              </div>
+              </Card>
             );
           })}
         </div>

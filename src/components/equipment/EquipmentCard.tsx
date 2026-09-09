@@ -7,6 +7,18 @@ import { resolveScheduleMetadata } from '../../services/scheduleService';
 import { calculateElapsedSince } from '../../services/timeService';
 import { OperationalBadge } from '../common/Badge';
 import { db } from '../../db/db';
+import { Card } from '../ui/card';
+import { Button } from '../ui/button';
+import {
+  Play,
+  Power,
+  AlertTriangle,
+  RotateCw,
+  History,
+  Clock,
+  MapPin,
+  Calendar
+} from 'lucide-react';
 
 interface EquipmentCardProps {
   equipment: Equipment;
@@ -21,11 +33,11 @@ export const EquipmentCard: React.FC<EquipmentCardProps> = ({ equipment }) => {
   const tag = equipment["Tagging Number"] || equipment["Equipment ID"] || "";
   const commonName = equipment["Common Name"] || tag;
 
-  // Derive operational state
+  // Operational State & Schedule Meta
   const opState = getEquipmentState(equipment, runtimeLogs, schedules, overrideSchedules);
   const scheduleMeta = resolveScheduleMetadata(equipment, schedules, overrideSchedules);
 
-  // Check if this equipment has pending outbox actions
+  // Check pending outbox actions
   useEffect(() => {
     let isMounted = true;
     const checkOutbox = async () => {
@@ -50,28 +62,36 @@ export const EquipmentCard: React.FC<EquipmentCardProps> = ({ equipment }) => {
 
   // Elapsed duration calculations
   let elapsedText = '';
+  let activeLog: RuntimeLog | null = null;
+
   if (opState.state === 'Running') {
-    const routineLog = opState.log as RuntimeLog;
-    const startedAt = routineLog ? routineLog["Started At"] : '';
+    activeLog = opState.log as RuntimeLog;
+    const startedAt = activeLog ? activeLog["Started At"] : '';
     elapsedText = startedAt ? `Running for ${calculateElapsedSince(startedAt)}` : 'Running';
   } else if (opState.subState === 'Downtime') {
-    const dLog = opState.log as RuntimeLog;
-    const shutAt = dLog ? (dLog["Started At"] || dLog["Shutdown At"]) : '';
-    elapsedText = shutAt ? `Down for ${calculateElapsedSince(shutAt)}` : 'Outage';
+    activeLog = opState.log as RuntimeLog;
+    const shutAt = activeLog ? (activeLog["Started At"] || activeLog["Shutdown At"]) : '';
+    elapsedText = shutAt ? `Down for ${calculateElapsedSince(shutAt)}` : 'Outage Reported';
   } else {
-    elapsedText = 'Off';
+    elapsedText = 'Standby / Off';
   }
 
+  // Border & Glow Stylings
+  const borderClass =
+    opState.state === 'Running'
+      ? 'border-l-4 border-l-emerald-500 hover:border-l-emerald-600'
+      : opState.subState === 'Downtime'
+      ? 'border-l-4 border-l-rose-500 hover:border-l-rose-600'
+      : 'border-l-4 border-l-slate-300 dark:border-l-slate-700';
+
   return (
-    <div className={`card h-100 shadow-sm border equipment-card state-${opState.subState.toLowerCase()}`}>
-      <div className="card-body p-3">
-        {/* Header: Tag & Status Badge */}
-        <div className="d-flex justify-content-between align-items-start mb-2">
-          <div>
-            <span className="badge bg-light text-secondary border font-monospace extra-small px-2 py-1">
-              {tag}
-            </span>
-          </div>
+    <Card className={`flex flex-col justify-between overflow-hidden shadow-xs hover:shadow-md transition-all ${borderClass} bg-card`}>
+      <div className="p-3.5 space-y-2.5">
+        {/* Layer 1: Monospace Tag + State Badge */}
+        <div className="flex items-start justify-between gap-2">
+          <span className="inline-flex items-center rounded-md border border-border bg-muted/60 px-2 py-0.5 font-mono text-[11px] font-semibold text-muted-foreground">
+            {tag}
+          </span>
           <OperationalBadge
             state={opState.state}
             subState={opState.subState}
@@ -80,114 +100,175 @@ export const EquipmentCard: React.FC<EquipmentCardProps> = ({ equipment }) => {
           />
         </div>
 
-        {/* Equipment Name & Location */}
-        <h6 className="card-title fw-bold text-dark mb-1 text-truncate" title={commonName}>
-          {commonName}
-        </h6>
-        <div className="d-flex align-items-center gap-1 extra-small text-muted mb-2 text-truncate">
-          <span>{equipment["System"] || 'General'}</span>
-          {equipment["Component"] && (
-            <>
-              <span>·</span>
-              <span>{equipment["Component"]}</span>
-            </>
-          )}
-          {equipment["Location"] && (
-            <>
-              <span>·</span>
-              <span className="text-secondary">{equipment["Location"]}</span>
-            </>
-          )}
+        {/* Layer 2: Equipment Name & Hierarchy */}
+        <div>
+          <h3 className="font-bold text-sm leading-tight text-foreground truncate" title={commonName}>
+            {commonName}
+          </h3>
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5 truncate">
+            <span>{equipment["System"] || 'General'}</span>
+            {equipment["Component"] && (
+              <>
+                <span>·</span>
+                <span className="truncate">{equipment["Component"]}</span>
+              </>
+            )}
+          </div>
         </div>
 
-        {/* Schedule & Runtime Meta */}
-        <div className="bg-light rounded-2 p-2 mb-3 border border-opacity-50">
-          <div className="d-flex justify-content-between align-items-center extra-small">
-            <span className="text-muted">Schedule:</span>
-            <span className="fw-semibold text-dark">
+        {/* Layer 3: Contextual Operational Status Box */}
+        <div
+          className={`rounded-lg border p-2 text-xs space-y-1 ${
+            opState.state === 'Running'
+              ? 'border-emerald-200 bg-emerald-50/80 text-emerald-900'
+              : opState.subState === 'Downtime'
+              ? 'border-rose-200 bg-rose-50/80 text-rose-900'
+              : 'border-border bg-muted/40 text-muted-foreground'
+          }`}
+        >
+          {/* Schedule Row */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1 text-[11px]">
+              <Calendar className="h-3 w-3 opacity-70" />
+              <span>Schedule:</span>
+            </div>
+            <span className="font-semibold text-foreground text-[11px]">
               {scheduleMeta.is24h ? '24/7 Continuous' : `${scheduleMeta.startup} - ${scheduleMeta.shutdown}`}
             </span>
           </div>
-          <div className="d-flex justify-content-between align-items-center extra-small mt-1">
-            <span className="text-muted">Duration:</span>
-            <span className={`fw-bold ${opState.state === 'Running' ? 'text-success' : opState.subState === 'Downtime' ? 'text-danger' : 'text-secondary'}`}>
+
+          {/* Duration / Outage Row */}
+          <div className="flex items-center justify-between gap-2 pt-0.5">
+            <div className="flex items-center gap-1 text-[11px]">
+              <Clock className="h-3 w-3 opacity-70" />
+              <span>Duration:</span>
+            </div>
+            <span
+              className={`font-bold text-[11px] ${
+                opState.state === 'Running'
+                  ? 'text-emerald-700'
+                  : opState.subState === 'Downtime'
+                  ? 'text-rose-700'
+                  : 'text-foreground'
+              }`}
+            >
               {elapsedText}
             </span>
           </div>
+
+          {/* Downtime Reason Row (if applicable) */}
+          {opState.subState === 'Downtime' && opState.reason && (
+            <div className="pt-0.5 text-[11px] text-rose-800 border-t border-rose-200/60 truncate">
+              <strong>Reason: </strong> {opState.reason}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Layer 4 & 5: Attribution & Action Bar */}
+      <div className="p-3.5 pt-0 mt-auto">
+        {/* Attribution Row */}
+        <div className="flex items-center justify-between text-[11px] text-muted-foreground border-t border-border/60 pt-2 mb-2.5">
+          <span className="truncate">
+            Operator: <strong className="text-foreground font-semibold">{activeLog?.["Operator Name"] || 'Unassigned'}</strong>
+          </span>
+          {equipment["Location"] && (
+            <span className="inline-flex items-center gap-0.5 text-muted-foreground shrink-0 max-w-[120px] truncate" title={equipment["Location"]}>
+              <MapPin className="h-2.5 w-2.5" />
+              {equipment["Location"]}
+            </span>
+          )}
         </div>
 
-        {/* Action Buttons */}
-        <div className="d-flex gap-2 align-items-center justify-content-end pt-1">
+        {/* Action Buttons Group */}
+        <div className="flex items-center gap-1.5">
           {opState.state === 'Running' ? (
             <>
-              <button
-                type="button"
-                className="btn btn-sm btn-outline-danger px-2 shadow-sm fw-semibold"
+              {/* Report Outage */}
+              <Button
+                variant="outline"
+                size="sm"
+                className="px-2 text-rose-600 border-rose-200 hover:bg-rose-50 hover:text-rose-700 cursor-pointer"
                 onClick={() => openDowntimeModal(equipment, 'Shutdown')}
                 title="Report Downtime Outage"
               >
-                <i className="bi bi-exclamation-triangle-fill"></i>
-              </button>
-              <button
-                type="button"
-                className="btn btn-sm btn-secondary text-white flex-fill fw-bold shadow-sm"
+                <AlertTriangle className="h-4 w-4" />
+              </Button>
+              {/* Routine Shutdown */}
+              <Button
+                variant="secondary"
+                size="sm"
+                className="flex-1 font-bold bg-slate-800 hover:bg-slate-900 text-white cursor-pointer"
                 onClick={() => openRoutineModal(equipment, 'Shutdown', opState.log)}
                 title="Turn off equipment (Routine Shutdown)"
               >
-                <i className="bi bi-power me-1"></i> Shutdown
-              </button>
+                <Power className="h-3.5 w-3.5 mr-1" />
+                <span>Shutdown</span>
+              </Button>
             </>
           ) : opState.subState === 'Downtime' ? (
             <>
-              <button
-                type="button"
-                className="btn btn-sm btn-warning text-dark flex-fill fw-bold shadow-sm"
+              {/* Restart Equipment */}
+              <Button
+                variant="warning"
+                size="sm"
+                className="flex-1 font-bold cursor-pointer"
                 onClick={() => openDowntimeModal(equipment, 'Restart')}
-                title="Restart Equipment"
+                title="Restart Equipment from Outage"
               >
-                <i className="bi bi-arrow-clockwise me-1"></i> Restart
-              </button>
-              <button
-                type="button"
-                className="btn btn-sm btn-secondary text-white flex-fill fw-bold shadow-sm"
+                <RotateCw className="h-3.5 w-3.5 mr-1" />
+                <span>Restart</span>
+              </Button>
+              {/* Secondary Routine Shutdown */}
+              <Button
+                variant="secondary"
+                size="sm"
+                className="flex-1 font-bold bg-slate-700 hover:bg-slate-800 text-white cursor-pointer"
                 onClick={() => openRoutineModal(equipment, 'Shutdown', opState.log)}
-                title="Turn off equipment (Routine Shutdown)"
+                title="Turn off equipment completely"
               >
-                <i className="bi bi-power me-1"></i> Shutdown
-              </button>
+                <Power className="h-3.5 w-3.5 mr-1" />
+                <span>Shutdown</span>
+              </Button>
             </>
           ) : (
             <>
-              <button
-                type="button"
-                className="btn btn-sm btn-outline-danger px-2 shadow-sm fw-semibold"
+              {/* Report Outage While Off */}
+              <Button
+                variant="outline"
+                size="sm"
+                className="px-2 text-rose-600 border-rose-200 hover:bg-rose-50 hover:text-rose-700 cursor-pointer"
                 onClick={() => openDowntimeModal(equipment, 'Shutdown')}
-                title="Report Downtime Outage"
+                title="Report Outage / Breakdown"
               >
-                <i className="bi bi-exclamation-triangle-fill"></i>
-              </button>
-              <button
-                type="button"
-                className="btn btn-sm btn-success text-white flex-fill fw-bold shadow-sm"
+                <AlertTriangle className="h-4 w-4" />
+              </Button>
+              {/* Startup */}
+              <Button
+                variant="success"
+                size="sm"
+                className="flex-1 font-bold cursor-pointer"
                 onClick={() => openRoutineModal(equipment, 'Startup')}
-                title="Start equipment (Routine Startup)"
+                title="Start Equipment"
               >
-                <i className="bi bi-play-fill me-1"></i> Startup
-              </button>
+                <Play className="h-3.5 w-3.5 mr-1 fill-white" />
+                <span>Startup</span>
+              </Button>
             </>
           )}
 
-          {/* Historical timeline drawer button */}
-          <button
-            type="button"
-            className="btn btn-sm btn-outline-secondary px-2 shadow-sm"
+          {/* Activity Timeline Trigger */}
+          <Button
+            variant="outline"
+            size="sm"
+            className="px-2 text-muted-foreground hover:text-foreground cursor-pointer"
             onClick={() => openTimelineModal(equipment)}
-            title="View History Timeline"
+            title="View History & Timeline"
           >
-            <i className="bi bi-clock-history"></i>
-          </button>
+            <History className="h-4 w-4" />
+          </Button>
         </div>
       </div>
-    </div>
+    </Card>
   );
 };

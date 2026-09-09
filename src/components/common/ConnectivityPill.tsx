@@ -4,6 +4,7 @@ import { getPendingOutboxCount } from '../../db/outbox';
 import { drainOutboxQueue } from '../../services/syncEngine';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useEquipmentStore } from '../../store/useEquipmentStore';
+import { RefreshCw, CloudUpload, WifiOff, CheckCircle2 } from 'lucide-react';
 
 export const ConnectivityPill: React.FC = () => {
   const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
@@ -85,15 +86,10 @@ export const ConnectivityPill: React.FC = () => {
 
   if (isSyncing) {
     return (
-      <button
-        type="button"
-        className="btn btn-sm btn-outline-primary d-inline-flex align-items-center gap-1 shadow-sm rounded-pill px-2 py-1"
-        disabled
-        style={{ fontSize: '0.75rem' }}
-      >
-        <span className="spinner-border spinner-border-sm" role="status"></span>
+      <div className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary shadow-xs">
+        <RefreshCw className="h-3 w-3 animate-spin" />
         <span>Syncing...</span>
-      </button>
+      </div>
     );
   }
 
@@ -101,12 +97,11 @@ export const ConnectivityPill: React.FC = () => {
     return (
       <button
         type="button"
-        className="btn btn-sm btn-warning text-dark d-inline-flex align-items-center gap-1 shadow-sm rounded-pill px-2 py-1"
+        className="inline-flex items-center gap-1.5 rounded-full border border-amber-300 bg-amber-500 hover:bg-amber-600 text-white px-2.5 py-1 text-xs font-semibold shadow-xs transition-colors cursor-pointer"
         onClick={handleManualSync}
         title="Tap to sync pending offline actions"
-        style={{ fontSize: '0.75rem' }}
       >
-        <i className="bi bi-cloud-arrow-up-fill"></i>
+        <CloudUpload className="h-3.5 w-3.5" />
         <span>{pendingCount} Pending Sync</span>
       </button>
     );
@@ -114,26 +109,22 @@ export const ConnectivityPill: React.FC = () => {
 
   if (!isOnline || !isApiReachable) {
     return (
-      <span
-        className="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 d-inline-flex align-items-center gap-1 shadow-sm rounded-pill px-2 py-1"
-        style={{ fontSize: '0.75rem' }}
-      >
-        <i className="bi bi-wifi-off"></i>
+      <div className="inline-flex items-center gap-1.5 rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-700 shadow-xs">
+        <WifiOff className="h-3.5 w-3.5 text-rose-600" />
         <span>Offline Mode</span>
-      </span>
+      </div>
     );
   }
 
   return (
     <button
       type="button"
-      className="btn btn-sm btn-light border border-secondary border-opacity-25 d-inline-flex align-items-center gap-1 shadow-sm rounded-pill px-2 py-1"
+      className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background hover:bg-accent px-2.5 py-1 text-xs font-medium text-muted-foreground shadow-xs transition-colors cursor-pointer"
       onClick={handleManualSync}
       title="Connected to Google Apps Script. Tap to refresh."
-      style={{ fontSize: '0.75rem' }}
     >
-      <i className="bi bi-check-circle-fill text-success"></i>
-      <span className="text-secondary">Online</span>
+      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+      <span className="text-foreground">Online</span>
     </button>
   );
 };

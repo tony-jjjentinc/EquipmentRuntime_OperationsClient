@@ -1,5 +1,9 @@
 import React, { useState } from 'react';
 import { useAuthStore } from '../../store/useAuthStore';
+import { Card } from '../ui/card';
+import { Button } from '../ui/button';
+import { Input } from '../ui/input';
+import { ShieldCheck, Mail, Lock, ArrowRight, RefreshCw, AlertCircle } from 'lucide-react';
 
 export const LoginOverlay: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -13,97 +17,89 @@ export const LoginOverlay: React.FC = () => {
   };
 
   return (
-    <div
-      className="d-flex align-items-center justify-content-center min-vh-100 px-3"
-      style={{
-        background: 'linear-gradient(135deg, #1a1d20 0%, #2b3035 100%)'
-      }}
-    >
-      <div className="card shadow-lg border-0 rounded-4 p-4" style={{ maxWidth: '400px', width: '100%' }}>
-        <div className="text-center mb-4">
-          <div
-            className="rounded-circle d-inline-flex align-items-center justify-content-center bg-primary text-white mb-3 shadow"
-            style={{ width: '56px', height: '56px' }}
-          >
-            <i className="bi bi-shield-lock-fill fs-3"></i>
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-950 p-4">
+      <Card className="w-full max-w-sm border-slate-700/60 bg-slate-900/90 text-slate-100 shadow-2xl backdrop-blur-xl p-6">
+        <div className="flex flex-col items-center text-center mb-6 space-y-2">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg">
+            <ShieldCheck className="h-7 w-7" />
           </div>
-          <h4 className="fw-bold text-dark mb-1">Equipment Operations</h4>
-          <p className="text-muted small mb-0">Sign in with your company credentials</p>
+          <div>
+            <h2 className="text-xl font-bold tracking-tight text-white">Equipment Operations</h2>
+            <p className="text-xs text-slate-400">Sign in with your company credentials</p>
+          </div>
         </div>
 
         {error && (
-          <div className="alert alert-danger py-2 px-3 small d-flex align-items-center mb-3 rounded-3" role="alert">
-            <i className="bi bi-exclamation-circle-fill me-2 fs-6"></i>
+          <div className="flex items-center gap-2 rounded-lg border border-rose-500/30 bg-rose-950/40 p-3 text-xs text-rose-300 mb-4">
+            <AlertCircle className="h-4 w-4 shrink-0 text-rose-400" />
             <div>{error}</div>
           </div>
         )}
 
-        <form onSubmit={handleSubmit}>
-          <div className="mb-3">
-            <label className="form-label extra-small fw-bold text-secondary text-uppercase">Email Address</label>
-            <div className="input-group">
-              <span className="input-group-text bg-light border-end-0">
-                <i className="bi bi-envelope text-muted"></i>
-              </span>
-              <input
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+              Email Address
+            </label>
+            <div className="relative">
+              <Mail className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+              <Input
                 type="email"
-                className="form-control bg-light border-start-0 shadow-none"
                 placeholder="operator@company.com"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
                 required
                 disabled={isLoading}
                 autoComplete="email"
+                className="pl-9 bg-slate-800/80 border-slate-700 text-white placeholder:text-slate-500"
               />
             </div>
           </div>
 
-          <div className="mb-4">
-            <label className="form-label extra-small fw-bold text-secondary text-uppercase">Password</label>
-            <div className="input-group">
-              <span className="input-group-text bg-light border-end-0">
-                <i className="bi bi-key text-muted"></i>
-              </span>
-              <input
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+              Password
+            </label>
+            <div className="relative">
+              <Lock className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+              <Input
                 type="password"
-                className="form-control bg-light border-start-0 shadow-none"
                 placeholder="••••••••"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 required
                 disabled={isLoading}
                 autoComplete="current-password"
+                className="pl-9 bg-slate-800/80 border-slate-700 text-white placeholder:text-slate-500"
               />
             </div>
           </div>
 
-          <div className="d-grid mb-3">
-            <button
-              type="submit"
-              className="btn btn-primary btn-lg rounded-pill fw-bold shadow-sm d-flex align-items-center justify-content-center gap-2"
-              disabled={isLoading}
-            >
-              {isLoading ? (
-                <>
-                  <span className="spinner-border spinner-border-sm" role="status"></span>
-                  <span>Signing In...</span>
-                </>
-              ) : (
-                <>
-                  <span>Sign In</span>
-                  <i className="bi bi-arrow-right"></i>
-                </>
-              )}
-            </button>
-          </div>
+          <Button
+            type="submit"
+            disabled={isLoading}
+            className="w-full font-bold cursor-pointer gap-2 mt-2"
+          >
+            {isLoading ? (
+              <>
+                <RefreshCw className="h-4 w-4 animate-spin" />
+                <span>Signing In...</span>
+              </>
+            ) : (
+              <>
+                <span>Sign In</span>
+                <ArrowRight className="h-4 w-4" />
+              </>
+            )}
+          </Button>
 
-          <div className="text-center">
-            <small className="text-muted extra-small">
-              Offline-ready: Authenticate once while online to enable full offline logging throughout your shift.
-            </small>
+          <div className="text-center pt-2">
+            <span className="text-[11px] text-slate-500">
+              Offline-ready PWA · JJJEI Equipment Runtime Tracker
+            </span>
           </div>
         </form>
-      </div>
+      </Card>
     </div>
   );
 };

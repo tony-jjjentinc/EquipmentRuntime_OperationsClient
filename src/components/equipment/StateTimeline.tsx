@@ -1,12 +1,29 @@
 import React from 'react';
 import { useUIStore } from '../../store/useUIStore';
 import { useEquipmentStore } from '../../store/useEquipmentStore';
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription
+} from '../ui/sheet';
+import {
+  Play,
+  Power,
+  AlertTriangle,
+  RotateCw,
+  History,
+  Image as ImageIcon,
+  Clock
+} from 'lucide-react';
+import { Button } from '../ui/button';
 
 export const StateTimeline: React.FC = () => {
   const { selectedEquipment, showTimelineModal, closeTimelineModal, openImagePreview } = useUIStore();
   const { historyLogs } = useEquipmentStore();
 
-  if (!showTimelineModal || !selectedEquipment) return null;
+  if (!selectedEquipment) return null;
 
   const tag = selectedEquipment["Tagging Number"] || selectedEquipment["Equipment ID"] || "";
   const commonName = selectedEquipment["Common Name"] || tag;
@@ -16,106 +33,99 @@ export const StateTimeline: React.FC = () => {
   );
 
   return (
-    <div className="modal fade show d-block" tabIndex={-1} style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(2px)' }}>
-      <div className="modal-dialog modal-dialog-centered modal-dialog-scrollable" style={{ maxWidth: '500px' }}>
-        <div className="modal-content shadow-lg border-0 rounded-4">
-          <div className="modal-header border-bottom px-4 py-3">
-            <div>
-              <h5 className="modal-title fw-bold text-dark mb-0">Runtime History</h5>
-              <div className="extra-small text-muted">
-                {commonName} (<span className="font-monospace text-secondary">{tag}</span>)
-              </div>
-            </div>
-            <button type="button" className="btn-close shadow-none" onClick={closeTimelineModal}></button>
+    <Sheet open={showTimelineModal} onOpenChange={open => !open && closeTimelineModal()}>
+      <SheetContent side="right" className="sm:max-w-md w-full">
+        <SheetHeader className="border-b border-border pb-3 mb-4">
+          <SheetTitle className="text-lg font-bold flex items-center gap-2">
+            <History className="h-5 w-5 text-primary" />
+            <span>Runtime Activity History</span>
+          </SheetTitle>
+          <SheetDescription className="text-xs text-muted-foreground">
+            {commonName} (<span className="font-mono text-foreground">{tag}</span>)
+          </SheetDescription>
+        </SheetHeader>
+
+        {equipmentLogs.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground space-y-2">
+            <Clock className="h-8 w-8 opacity-40" />
+            <p className="text-xs">No recorded actions in the recent history window.</p>
           </div>
+        ) : (
+          <div className="relative pl-4 border-l-2 border-primary/20 space-y-4 ml-2">
+            {equipmentLogs.map((log, index) => {
+              const isStartup = log.action === 'Startup';
+              const isShutdown = log.action === 'Shutdown';
+              const isDowntime =
+                log.action === 'Report Downtime' ||
+                (log.action === 'Shutdown' && log.type === 'Downtime');
+              const isRestart = log.action === 'Restart';
 
-          <div className="modal-body px-4 py-3">
-            {equipmentLogs.length === 0 ? (
-              <div className="text-center py-5 text-muted">
-                <i className="bi bi-clock-history fs-2 d-block mb-2 text-secondary"></i>
-                <p className="small mb-0">No recorded actions in the last 7 days.</p>
-              </div>
-            ) : (
-              <div className="position-relative ps-3 border-start border-2 border-primary border-opacity-25 ms-2">
-                {equipmentLogs.map((log, index) => {
-                  const isStartup = log.action === 'Startup';
-                  const isShutdown = log.action === 'Shutdown';
-                  const isDowntime = log.action === 'Report Downtime' || log.action === 'Shutdown' && log.type === 'Downtime';
-                  const isRestart = log.action === 'Restart';
+              let badgeColor = 'bg-slate-100 text-slate-700 border-slate-200';
+              let Icon = History;
 
-                  let badgeBg = 'bg-secondary text-white';
-                  let icon = 'bi-record-circle';
+              if (isStartup) {
+                badgeColor = 'bg-emerald-100 text-emerald-800 border-emerald-300';
+                Icon = Play;
+              } else if (isRestart) {
+                badgeColor = 'bg-amber-100 text-amber-800 border-amber-300';
+                Icon = RotateCw;
+              } else if (isDowntime) {
+                badgeColor = 'bg-rose-100 text-rose-800 border-rose-300';
+                Icon = AlertTriangle;
+              } else if (isShutdown) {
+                badgeColor = 'bg-slate-800 text-white border-slate-700';
+                Icon = Power;
+              }
 
-                  if (isStartup) {
-                    badgeBg = 'bg-success text-white';
-                    icon = 'bi-play-fill';
-                  } else if (isRestart) {
-                    badgeBg = 'bg-warning text-dark';
-                    icon = 'bi-arrow-clockwise';
-                  } else if (isDowntime) {
-                    badgeBg = 'bg-danger text-white';
-                    icon = 'bi-exclamation-triangle-fill';
-                  } else if (isShutdown) {
-                    badgeBg = 'bg-dark text-white';
-                    icon = 'bi-power';
-                  }
+              return (
+                <div key={index} className="relative group">
+                  {/* Timeline Dot Icon */}
+                  <span
+                    className={`absolute -left-[25px] top-1.5 flex h-5 w-5 items-center justify-center rounded-full border shadow-xs ${badgeColor}`}
+                  >
+                    <Icon className="h-3 w-3" />
+                  </span>
 
-                  return (
-                    <div key={index} className="mb-4 position-relative">
-                      {/* Timeline Node Dot */}
-                      <span
-                        className={`position-absolute top-0 start-0 translate-middle rounded-circle d-flex align-items-center justify-content-center shadow-sm ${badgeBg}`}
-                        style={{ width: '22px', height: '22px', left: '-13px' }}
-                      >
-                        <i className={`bi ${icon}`} style={{ fontSize: '0.65rem' }}></i>
+                  {/* Card Item */}
+                  <div className="rounded-xl border border-border bg-card p-3 shadow-xs space-y-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-bold ${badgeColor}`}>
+                        {log.action}
                       </span>
-
-                      {/* Card Content */}
-                      <div className="bg-light rounded-3 p-3 ms-2 border">
-                        <div className="d-flex justify-content-between align-items-center mb-1">
-                          <span className={`badge ${badgeBg} extra-small px-2 py-1`}>
-                            {log.action}
-                          </span>
-                          <span className="text-muted extra-small">
-                            {log.date} · {log.time}
-                          </span>
-                        </div>
-
-                        <div className="extra-small text-muted mb-1">
-                          Reported by: <strong className="text-dark">{log.reportedBy || 'Unknown'}</strong>
-                        </div>
-
-                        {log.remarks && (
-                          <div className="small text-secondary bg-white rounded p-2 border mb-2">
-                            "{log.remarks}"
-                          </div>
-                        )}
-
-                        {log.imageUrl && (
-                          <button
-                            type="button"
-                            className="btn btn-sm btn-outline-primary d-inline-flex align-items-center gap-1 extra-small rounded-pill py-1 px-2"
-                            onClick={() => openImagePreview(log.imageUrl!)}
-                          >
-                            <i className="bi bi-image"></i>
-                            <span>View Attachment</span>
-                          </button>
-                        )}
-                      </div>
+                      <span className="text-[11px] text-muted-foreground">
+                        {log.date} · {log.time}
+                      </span>
                     </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
 
-          <div className="modal-footer border-top-0 pt-0 pb-3 px-4">
-            <button type="button" className="btn btn-light rounded-pill w-100 fw-semibold" onClick={closeTimelineModal}>
-              Close
-            </button>
+                    <div className="text-xs text-muted-foreground">
+                      By: <strong className="text-foreground">{log.reportedBy || 'Unknown'}</strong>
+                    </div>
+
+                    {log.remarks && (
+                      <div className="rounded-md border border-border/80 bg-muted/40 p-2 text-xs italic text-foreground">
+                        "{log.remarks}"
+                      </div>
+                    )}
+
+                    {log.imageUrl && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs gap-1.5 mt-1 cursor-pointer"
+                        onClick={() => openImagePreview(log.imageUrl!)}
+                      >
+                        <ImageIcon className="h-3.5 w-3.5 text-primary" />
+                        <span>View Attached Photo</span>
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
-        </div>
-      </div>
-    </div>
+        )}
+      </SheetContent>
+    </Sheet>
   );
 };

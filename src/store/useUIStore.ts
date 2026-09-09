@@ -1,8 +1,11 @@
 import { create } from 'zustand';
 import { Equipment, RuntimeLog } from '../types';
 
+export type RuntimeStateFilter = 'All' | 'Running' | 'Downtime' | 'Off';
+
 interface UIStore {
   activeTab: 'equipment' | 'schedules' | 'history';
+  runtimeStateFilter: RuntimeStateFilter;
   searchQuery: string;
   systemFilter: string;
   componentFilter: string;
@@ -10,7 +13,7 @@ interface UIStore {
   historySystemFilter: string;
   historyMyActionsOnly: boolean;
 
-  // Modals
+  // Modals & Drawers
   selectedEquipment: Equipment | null;
   selectedLog: RuntimeLog | null;
   showRoutineModal: boolean;
@@ -22,6 +25,7 @@ interface UIStore {
 
   // Actions
   setActiveTab: (tab: 'equipment' | 'schedules' | 'history') => void;
+  setRuntimeStateFilter: (filter: RuntimeStateFilter) => void;
   setSearchQuery: (query: string) => void;
   setSystemFilter: (sys: string) => void;
   setComponentFilter: (comp: string) => void;
@@ -41,6 +45,7 @@ interface UIStore {
 
 export const useUIStore = create<UIStore>(set => ({
   activeTab: 'equipment',
+  runtimeStateFilter: 'All',
   searchQuery: '',
   systemFilter: '',
   componentFilter: '',
@@ -58,8 +63,9 @@ export const useUIStore = create<UIStore>(set => ({
   previewImageUrl: null,
 
   setActiveTab: tab => set({ activeTab: tab }),
+  setRuntimeStateFilter: filter => set({ runtimeStateFilter: filter }),
   setSearchQuery: query => set({ searchQuery: query }),
-  setSystemFilter: sys => set({ systemFilter: sys }),
+  setSystemFilter: sys => set({ systemFilter: sys, componentFilter: '' }), // Reset component when system changes
   setComponentFilter: comp => set({ componentFilter: comp }),
   setHistoryFilterAction: act => set({ historyFilterAction: act }),
   setHistorySystemFilter: sys => set({ historySystemFilter: sys }),

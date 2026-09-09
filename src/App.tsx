@@ -13,6 +13,7 @@ import { StateTimeline } from './components/equipment/StateTimeline';
 import { RoutineModal } from './components/forms/RoutineModal';
 import { DowntimeModal } from './components/forms/DowntimeModal';
 import { ImageModal } from './components/common/ImageModal';
+import { RefreshCw } from 'lucide-react';
 
 export const App: React.FC = () => {
   const { token, isAuthenticated, isLoading: isAuthLoading, initializeAuth } = useAuthStore();
@@ -34,12 +35,10 @@ export const App: React.FC = () => {
   // 3. Render Authentication Screen if not logged in
   if (isAuthLoading) {
     return (
-      <div className="d-flex align-items-center justify-content-center min-vh-100 bg-light">
-        <div className="text-center">
-          <div className="spinner-border text-primary mb-3" role="status" style={{ width: '3rem', height: '3rem' }}>
-            <span className="visually-hidden">Loading session...</span>
-          </div>
-          <p className="text-muted small">Validating session credentials...</p>
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="flex flex-col items-center space-y-3 text-center">
+          <RefreshCw className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-xs text-muted-foreground">Validating session credentials...</p>
         </div>
       </div>
     );
@@ -50,17 +49,17 @@ export const App: React.FC = () => {
   }
 
   return (
-    <div className="min-vh-100 bg-light pb-5">
+    <div className="min-h-screen bg-slate-50/50 dark:bg-background text-foreground pb-8">
       <Header />
 
-      <main className="container-fluid px-3">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <Navigation />
 
         {activeTab === 'equipment' && <EquipmentGrid />}
         {activeTab === 'history' && <ActivityHistoryFeed />}
       </main>
 
-      {/* Action Modals */}
+      {/* Action Modals & Drawers */}
       <RoutineModal />
       <DowntimeModal />
       <StateTimeline />

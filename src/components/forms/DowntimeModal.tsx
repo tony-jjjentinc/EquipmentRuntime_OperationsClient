@@ -8,6 +8,17 @@ import { getFormattedDate, get24HourTime } from '../../services/timeService';
 import { queueOutboxAction, queuePhotoBlob } from '../../db/outbox';
 import { drainOutboxQueue } from '../../services/syncEngine';
 import { RuntimeLog } from '../../types';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter
+} from '../ui/dialog';
+import { Button } from '../ui/button';
+import { Textarea } from '../ui/textarea';
+import { RefreshCw, MapPin, AlertTriangle } from 'lucide-react';
 
 export const DowntimeModal: React.FC = () => {
   const { selectedEquipment, downtimeAction, showDowntimeModal, closeDowntimeModal } = useUIStore();
@@ -65,10 +76,10 @@ export const DowntimeModal: React.FC = () => {
           "Notes": ''
         };
 
-        // 1. Optimistic Update (Clean-slate: Zero dummy routine anchor rows created)
+        // 1. Optimistic Update
         await optimisticAddRuntimeLog(runtimeLog);
 
-        // 2. Queue into Offline Outbox (Defensively strip base64 from payload)
+        // 2. Queue into Offline Outbox
         await queueOutboxAction({
           id: txId,
           actionType: 'Downtime',
@@ -92,7 +103,7 @@ export const DowntimeModal: React.FC = () => {
         // 1. Optimistic Restart
         await optimisticRestartDowntime(tag, timeNow, operatorEmail, remarks, photoUrl);
 
-        // 2. Queue into Offline Outbox (Defensively strip base64 from payload)
+        // 2. Queue into Offline Outbox
         await queueOutboxAction({
           id: txId,
           actionType: 'Restart',
@@ -136,119 +147,129 @@ export const DowntimeModal: React.FC = () => {
   };
 
   return (
-    <div className="modal fade show d-block" tabIndex={-1} style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(2px)' }}>
-      <div className="modal-dialog modal-dialog-centered modal-dialog-bottom">
-        <div className="modal-content shadow-lg border-0">
-          <div className="modal-header border-bottom-0 pb-0 pt-3 px-3">
-            <div>
-              <h5 className={`modal-title fw-bold ${downtimeAction === 'Restart' ? 'text-warning' : 'text-danger'}`}>
-                {downtimeAction === 'Restart' ? 'Restart Equipment' : 'Report Equipment Downtime'}
-              </h5>
-              <p className="text-muted extra-small mb-0">
-                Operating as {operatorName} ({operatorEmail})
-              </p>
-            </div>
-            <button type="button" className="btn-close shadow-none" onClick={closeDowntimeModal} disabled={isSubmitting}></button>
-          </div>
+    <Dialog open={showDowntimeModal} onOpenChange={open => !open && closeDowntimeModal()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-lg font-bold flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5 text-rose-600" />
+            <span>{downtimeAction === 'Shutdown' ? 'Report Downtime Outage' : 'Restart Equipment'}</span>
+          </DialogTitle>
+          <DialogDescription className="text-xs text-muted-foreground">
+            Reporting as <strong className="text-foreground">{operatorName}</strong> ({operatorEmail})
+          </DialogDescription>
+        </DialogHeader>
 
-          <div className="modal-body px-3 py-3">
-            {/* Equipment Banner */}
-            <div className={`rounded-3 p-3 mb-3 border ${downtimeAction === 'Restart' ? 'bg-warning bg-opacity-10 border-warning' : 'bg-danger bg-opacity-10 border-danger'}`}>
-              <h6 className="mb-1 text-dark fw-bold">{commonName}</h6>
-              <div className="d-flex justify-content-between align-items-center extra-small text-muted">
-                <span>Tag: <strong className="text-secondary">{tag}</strong></span>
-                <span>{selectedEquipment["Location"] || ''}</span>
-              </div>
-            </div>
-
-            <form onSubmit={handleSubmit}>
-              {downtimeAction === 'Shutdown' && (
-                <div className="mb-3">
-                  <label className="form-label extra-small fw-bold text-secondary text-uppercase mb-1">
-                    Shutdown Reason / Type <span className="text-danger">*</span>
-                  </label>
-                  <select
-                    className="form-select bg-light shadow-none"
-                    value={shutdownType}
-                    onChange={e => setShutdownType(e.target.value)}
-                    required
-                    disabled={isSubmitting}
-                  >
-                    {shutdownTypes.map(type => (
-                      <option key={type} value={type}>
-                        {type}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              <PhotoUploader
-                label={downtimeAction === 'Shutdown' ? 'Incident Photo (Optional)' : 'Restart Photo (Optional)'}
-                taggingNumber={tag}
-                commonName={commonName}
-                actionType={downtimeAction === 'Shutdown' ? 'Downtime Outage' : 'Downtime Restart'}
-                operatorName={operatorName}
-                operatorEmail={operatorEmail}
-                maxRecencyHours={appConfig.photoRecencyHours}
-                isStrict={appConfig.strictPhotoRecency}
-                disabled={isSubmitting}
-                onPhotoCaptured={setPhotoData}
-                onPhotoRemoved={() => setPhotoData(null)}
-              />
-
-              <div className="mb-3">
-                <label className="form-label extra-small fw-bold text-secondary text-uppercase mb-1">
-                  Incident Remarks <span className="text-danger">*</span>
-                </label>
-                <textarea
-                  className="form-control bg-light shadow-none"
-                  rows={3}
-                  placeholder={downtimeAction === 'Shutdown' ? 'Describe the issue or failure...' : 'Describe resolution and restart condition...'}
-                  maxLength={255}
-                  value={remarks}
-                  required
-                  onInput={e => setRemarks((e.target as HTMLTextAreaElement).value)}
-                  disabled={isSubmitting}
-                ></textarea>
-                <div className="d-flex justify-content-between align-items-center mt-1">
-                  <small className="text-muted extra-small">Max 255 characters</small>
-                  <small className={`extra-small ${remarks.length >= 240 ? 'text-danger fw-bold' : 'text-muted'}`}>
-                    {remarks.length} / 255
-                  </small>
-                </div>
-              </div>
-
-              <div className="d-grid gap-2 pt-2">
-                <button
-                  type="submit"
-                  className={`btn btn-lg rounded-pill fw-bold shadow-sm ${
-                    downtimeAction === 'Restart' ? 'btn-warning text-dark' : 'btn-danger text-white'
-                  }`}
-                  disabled={isSubmitting}
-                >
-                  {isSubmitting ? (
-                    <>
-                      <span className="spinner-border spinner-border-sm me-2" role="status"></span>
-                      <span>Submitting...</span>
-                    </>
-                  ) : (
-                    <span>{downtimeAction === 'Restart' ? 'Confirm Restart' : 'Submit Downtime Report'}</span>
-                  )}
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-light rounded-pill fw-bold text-muted"
-                  onClick={closeDowntimeModal}
-                  disabled={isSubmitting}
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
+        {/* Equipment Context Banner */}
+        <div className="rounded-xl border border-rose-200 bg-rose-50/70 p-3 space-y-1">
+          <h4 className="font-bold text-sm text-foreground">{commonName}</h4>
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span>Tag: <strong className="font-mono text-foreground">{tag}</strong></span>
+            {selectedEquipment["Location"] && (
+              <span className="inline-flex items-center gap-1">
+                <MapPin className="h-3 w-3" />
+                {selectedEquipment["Location"]}
+              </span>
+            )}
           </div>
         </div>
-      </div>
-    </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {downtimeAction === 'Shutdown' && (
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                Outage Reason / Category *
+              </label>
+              <select
+                className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                value={shutdownType}
+                onChange={e => setShutdownType(e.target.value)}
+                disabled={isSubmitting}
+                required
+              >
+                {shutdownTypes.length > 0 ? (
+                  shutdownTypes.map(st => (
+                    <option key={st} value={st}>
+                      {st}
+                    </option>
+                  ))
+                ) : (
+                  <>
+                    <option value="Unscheduled Maintenance">Unscheduled Maintenance</option>
+                    <option value="Emergency Breakdown">Emergency Breakdown</option>
+                    <option value="Facility Power Loss">Facility Power Loss</option>
+                    <option value="Parts Replacement">Parts Replacement</option>
+                  </>
+                )}
+              </select>
+            </div>
+          )}
+
+          <PhotoUploader
+            label={downtimeAction === 'Shutdown' ? 'Outage Photo (Optional)' : 'Restart Photo (Optional)'}
+            taggingNumber={tag}
+            commonName={commonName}
+            actionType={`Downtime ${downtimeAction}`}
+            operatorName={operatorName}
+            operatorEmail={operatorEmail}
+            maxRecencyHours={appConfig.photoRecencyHours}
+            isStrict={appConfig.strictPhotoRecency}
+            disabled={isSubmitting}
+            onPhotoCaptured={setPhotoData}
+            onPhotoRemoved={() => setPhotoData(null)}
+          />
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              {downtimeAction === 'Shutdown' ? 'Outage Remarks / Findings' : 'Restart Remarks / Resolution'}
+            </label>
+            <Textarea
+              rows={3}
+              placeholder={
+                downtimeAction === 'Shutdown'
+                  ? 'Describe problem, alarms, or breakdown cause...'
+                  : 'Describe corrective action taken before restarting...'
+              }
+              maxLength={255}
+              value={remarks}
+              onChange={e => setRemarks(e.target.value)}
+              disabled={isSubmitting}
+            />
+            <div className="flex justify-between items-center text-[11px] text-muted-foreground">
+              <span>Max 255 characters</span>
+              <span className={remarks.length >= 240 ? 'text-rose-600 font-bold' : ''}>
+                {remarks.length} / 255
+              </span>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={closeDowntimeModal}
+              disabled={isSubmitting}
+              className="cursor-pointer"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant={downtimeAction === 'Shutdown' ? 'downtime' : 'warning'}
+              disabled={isSubmitting}
+              className="cursor-pointer font-bold gap-2"
+            >
+              {isSubmitting ? (
+                <>
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                  <span>Submitting...</span>
+                </>
+              ) : (
+                <span>{downtimeAction === 'Shutdown' ? 'Confirm Outage' : 'Confirm Restart'}</span>
+              )}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 };

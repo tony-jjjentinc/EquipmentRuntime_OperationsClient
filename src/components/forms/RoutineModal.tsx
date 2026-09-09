@@ -8,6 +8,17 @@ import { getFormattedDate, get24HourTime } from '../../services/timeService';
 import { queueOutboxAction, queuePhotoBlob } from '../../db/outbox';
 import { drainOutboxQueue } from '../../services/syncEngine';
 import { RuntimeLog } from '../../types';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter
+} from '../ui/dialog';
+import { Button } from '../ui/button';
+import { Textarea } from '../ui/textarea';
+import { RefreshCw, MapPin } from 'lucide-react';
 
 export const RoutineModal: React.FC = () => {
   const { selectedEquipment, routineAction, showRoutineModal, closeRoutineModal } = useUIStore();
@@ -103,97 +114,94 @@ export const RoutineModal: React.FC = () => {
   };
 
   return (
-    <div className="modal fade show d-block" tabIndex={-1} style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(2px)' }}>
-      <div className="modal-dialog modal-dialog-centered modal-dialog-bottom">
-        <div className="modal-content shadow-lg border-0">
-          <div className="modal-header border-bottom-0 pb-0 pt-3 px-3">
-            <div>
-              <h5 className="modal-title fw-bold text-dark">
-                {routineAction === 'Startup' ? 'Routine Startup' : 'Routine Shutdown'}
-              </h5>
-              <p className="text-muted extra-small mb-0">
-                Operating as {operatorName} ({operatorEmail})
-              </p>
-            </div>
-            <button type="button" className="btn-close shadow-none" onClick={closeRoutineModal} disabled={isSubmitting}></button>
-          </div>
+    <Dialog open={showRoutineModal} onOpenChange={open => !open && closeRoutineModal()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-lg font-bold">
+            {routineAction === 'Startup' ? 'Routine Startup' : 'Routine Shutdown'}
+          </DialogTitle>
+          <DialogDescription className="text-xs text-muted-foreground">
+            Operating as <strong className="text-foreground">{operatorName}</strong> ({operatorEmail})
+          </DialogDescription>
+        </DialogHeader>
 
-          <div className="modal-body px-3 py-3">
-            {/* Equipment Context Banner */}
-            <div className="bg-light rounded-3 p-3 mb-3 border">
-              <h6 className="mb-1 text-dark fw-bold">{commonName}</h6>
-              <div className="d-flex justify-content-between align-items-center extra-small text-muted">
-                <span>Tag: <strong className="text-secondary">{tag}</strong></span>
-                <span>{selectedEquipment["Location"] || ''}</span>
-              </div>
-            </div>
-
-            <form onSubmit={handleSubmit}>
-              <PhotoUploader
-                label={routineAction === 'Startup' ? 'Startup Photo (Optional)' : 'Shutdown Photo (Optional)'}
-                taggingNumber={tag}
-                commonName={commonName}
-                actionType={`Routine ${routineAction}`}
-                operatorName={operatorName}
-                operatorEmail={operatorEmail}
-                maxRecencyHours={appConfig.photoRecencyHours}
-                isStrict={appConfig.strictPhotoRecency}
-                disabled={isSubmitting}
-                onPhotoCaptured={setPhotoData}
-                onPhotoRemoved={() => setPhotoData(null)}
-              />
-
-              <div className="mb-3">
-                <label className="form-label extra-small fw-bold text-secondary text-uppercase mb-1">
-                  On-Ground Remarks
-                </label>
-                <textarea
-                  className="form-control bg-light shadow-none"
-                  rows={3}
-                  placeholder={`Add optional remarks for ${routineAction.toLowerCase()}...`}
-                  maxLength={255}
-                  value={remarks}
-                  onInput={e => setRemarks((e.target as HTMLTextAreaElement).value)}
-                  disabled={isSubmitting}
-                ></textarea>
-                <div className="d-flex justify-content-between align-items-center mt-1">
-                  <small className="text-muted extra-small">Max 255 characters</small>
-                  <small className={`extra-small ${remarks.length >= 240 ? 'text-danger fw-bold' : 'text-muted'}`}>
-                    {remarks.length} / 255
-                  </small>
-                </div>
-              </div>
-
-              <div className="d-grid gap-2 pt-2">
-                <button
-                  type="submit"
-                  className={`btn btn-lg rounded-pill fw-bold shadow-sm ${
-                    routineAction === 'Startup' ? 'btn-success text-white' : 'btn-secondary text-white'
-                  }`}
-                  disabled={isSubmitting}
-                >
-                  {isSubmitting ? (
-                    <>
-                      <span className="spinner-border spinner-border-sm me-2" role="status"></span>
-                      <span>Recording...</span>
-                    </>
-                  ) : (
-                    <span>Confirm {routineAction}</span>
-                  )}
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-light rounded-pill fw-bold text-muted"
-                  onClick={closeRoutineModal}
-                  disabled={isSubmitting}
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
+        {/* Equipment Context Banner */}
+        <div className="rounded-xl border border-border bg-muted/40 p-3 space-y-1">
+          <h4 className="font-bold text-sm text-foreground">{commonName}</h4>
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span>Tag: <strong className="font-mono text-foreground">{tag}</strong></span>
+            {selectedEquipment["Location"] && (
+              <span className="inline-flex items-center gap-1">
+                <MapPin className="h-3 w-3" />
+                {selectedEquipment["Location"]}
+              </span>
+            )}
           </div>
         </div>
-      </div>
-    </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <PhotoUploader
+            label={routineAction === 'Startup' ? 'Startup Photo (Optional)' : 'Shutdown Photo (Optional)'}
+            taggingNumber={tag}
+            commonName={commonName}
+            actionType={`Routine ${routineAction}`}
+            operatorName={operatorName}
+            operatorEmail={operatorEmail}
+            maxRecencyHours={appConfig.photoRecencyHours}
+            isStrict={appConfig.strictPhotoRecency}
+            disabled={isSubmitting}
+            onPhotoCaptured={setPhotoData}
+            onPhotoRemoved={() => setPhotoData(null)}
+          />
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              On-Ground Remarks
+            </label>
+            <Textarea
+              rows={3}
+              placeholder={`Add optional notes for ${routineAction.toLowerCase()}...`}
+              maxLength={255}
+              value={remarks}
+              onChange={e => setRemarks(e.target.value)}
+              disabled={isSubmitting}
+            />
+            <div className="flex justify-between items-center text-[11px] text-muted-foreground">
+              <span>Max 255 characters</span>
+              <span className={remarks.length >= 240 ? 'text-rose-600 font-bold' : ''}>
+                {remarks.length} / 255
+              </span>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={closeRoutineModal}
+              disabled={isSubmitting}
+              className="cursor-pointer"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant={routineAction === 'Startup' ? 'success' : 'default'}
+              disabled={isSubmitting}
+              className="cursor-pointer font-bold gap-2"
+            >
+              {isSubmitting ? (
+                <>
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                  <span>Recording...</span>
+                </>
+              ) : (
+                <span>Confirm {routineAction}</span>
+              )}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 };
