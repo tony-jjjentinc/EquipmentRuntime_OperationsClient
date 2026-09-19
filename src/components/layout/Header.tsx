@@ -3,19 +3,27 @@ import { useAuthStore } from '../../store/useAuthStore';
 import { useEquipmentStore } from '../../store/useEquipmentStore';
 import { ConnectivityPill } from '../common/ConnectivityPill';
 import { getEquipmentState } from '../../services/equipmentStateService';
+import { isEquipmentVisibleToUser } from '../../services/operatorAssignmentService';
 import { Activity, LogOut, ShieldCheck } from 'lucide-react';
 
 export const Header: React.FC = () => {
   const { user, logout } = useAuthStore();
-  const { equipment, runtimeLogs, schedules, overrideSchedules } = useEquipmentStore();
+  const { equipment, runtimeLogs, schedules, overrideSchedules, equipmentAssignments } = useEquipmentStore();
 
   const userName = user?.name || user?.email || 'Operator';
   const userRoles = (user?.roles || []).join(', ') || 'Technician';
+  const userEmail = user?.email || '';
+  const userEmpNum = user?.employeeNumber || user?.employee_number || user?.employee_no || '';
+
+  // Scope to visible equipment for logged in operator
+  const visibleEquipment = equipment.filter(eq =>
+    isEquipmentVisibleToUser(eq, userEmail, user?.roles || [], equipmentAssignments, null, userEmpNum)
+  );
 
   // Live operational telemetry counts
   let runningCount = 0;
   let downtimeCount = 0;
-  equipment.forEach(eq => {
+  visibleEquipment.forEach(eq => {
     const state = getEquipmentState(eq, runtimeLogs, schedules, overrideSchedules);
     if (state.state === 'Running') {
       runningCount++;
@@ -54,7 +62,7 @@ export const Header: React.FC = () => {
         <div className="hidden sm:flex items-center gap-2 text-xs">
           <div className="flex items-center gap-1.5 rounded-full border border-border bg-slate-50 px-3 py-1 text-slate-700 font-medium">
             <span>Total:</span>
-            <strong className="text-foreground">{equipment.length}</strong>
+            <strong className="text-foreground">{visibleEquipment.length}</strong>
           </div>
           <div className="flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-emerald-800 font-medium">
             <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />

@@ -23,6 +23,9 @@ export const App: React.FC = () => {
   const { loadInitialData } = useEquipmentStore();
   const { activeTab } = useUIStore();
 
+  const [showFilterDrawer, setShowFilterDrawer] = React.useState(false);
+  const [showSyncHealthModal, setShowSyncHealthModal] = React.useState(false);
+
   // 1. Initialize Authentication session on mount
   useEffect(() => {
     initializeAuth();
@@ -50,9 +53,6 @@ export const App: React.FC = () => {
   if (!isAuthenticated) {
     return <LoginOverlay />;
   }
-
-  const [showFilterDrawer, setShowFilterDrawer] = React.useState(false);
-  const [showSyncHealthModal, setShowSyncHealthModal] = React.useState(false);
 
   return (
     <div className="min-h-screen bg-slate-50/50 dark:bg-background text-foreground pb-20 sm:pb-8">

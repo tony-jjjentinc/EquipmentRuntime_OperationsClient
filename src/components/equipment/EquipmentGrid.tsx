@@ -1,13 +1,16 @@
 import React, { useMemo } from 'react';
 import { useEquipmentStore } from '../../store/useEquipmentStore';
 import { useUIStore } from '../../store/useUIStore';
+import { useAuthStore } from '../../store/useAuthStore';
 import { getEquipmentState } from '../../services/equipmentStateService';
+import { isEquipmentVisibleToUser } from '../../services/operatorAssignmentService';
 import { EquipmentCard } from './EquipmentCard';
 import { RefreshCw, Inbox, RotateCcw } from 'lucide-react';
 import { Button } from '../ui/button';
 
 export const EquipmentGrid: React.FC = () => {
-  const { equipment, runtimeLogs, schedules, overrideSchedules, isLoading } = useEquipmentStore();
+  const { equipment, runtimeLogs, schedules, overrideSchedules, equipmentAssignments, isLoading } = useEquipmentStore();
+  const { user } = useAuthStore();
   const {
     searchQuery,
     systemFilter,
@@ -19,8 +22,19 @@ export const EquipmentGrid: React.FC = () => {
     setSearchQuery
   } = useUIStore();
 
+  const userEmail = user?.email || '';
+  const userRoles = user?.roles || [];
+  const userEmpNum = user?.employeeNumber || user?.employee_number || user?.employee_no || '';
+
+  // 1. Scoped visibility filtering (Management sees all, Operators see assigned only)
+  const visibleEquipment = useMemo(() => {
+    return equipment.filter(eq =>
+      isEquipmentVisibleToUser(eq, userEmail, userRoles, equipmentAssignments, null, userEmpNum)
+    );
+  }, [equipment, userEmail, userRoles, equipmentAssignments, userEmpNum]);
+
   const filteredEquipment = useMemo(() => {
-    return equipment.filter(eq => {
+    return visibleEquipment.filter(eq => {
       // 1. Runtime State Filter (All, Running, Downtime, Off)
       if (runtimeStateFilter !== 'All') {
         const op = getEquipmentState(eq, runtimeLogs, schedules, overrideSchedules);
@@ -50,7 +64,7 @@ export const EquipmentGrid: React.FC = () => {
 
       return true;
     });
-  }, [equipment, runtimeLogs, schedules, overrideSchedules, runtimeStateFilter, systemFilter, componentFilter, searchQuery]);
+  }, [visibleEquipment, runtimeLogs, schedules, overrideSchedules, runtimeStateFilter, systemFilter, componentFilter, searchQuery]);
 
   const handleResetFilters = () => {
     setSystemFilter('');
@@ -64,6 +78,22 @@ export const EquipmentGrid: React.FC = () => {
       <div className="flex flex-col items-center justify-center py-16 space-y-3">
         <RefreshCw className="h-8 w-8 animate-spin text-primary" />
         <p className="text-sm text-muted-foreground">Loading equipment directory...</p>
+      </div>
+    );
+  }
+
+  if (visibleEquipment.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-card p-12 text-center shadow-xs my-6 space-y-3">
+        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
+          <Inbox className="h-6 w-6" />
+        </div>
+        <div className="space-y-1">
+          <h3 className="font-bold text-base text-foreground">No Equipment Assigned</h3>
+          <p className="text-xs text-muted-foreground max-w-sm">
+            You do not currently have any equipment assigned under your account for today's operational schedule.
+          </p>
+        </div>
       </div>
     );
   }

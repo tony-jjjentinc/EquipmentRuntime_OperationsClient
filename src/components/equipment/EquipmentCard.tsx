@@ -5,7 +5,9 @@ import { useUIStore } from '../../store/useUIStore';
 import { getEquipmentState } from '../../services/equipmentStateService';
 import { resolveScheduleMetadata } from '../../services/scheduleService';
 import { calculateElapsedSince } from '../../services/timeService';
-import { OperationalBadge } from '../common/Badge';
+import { OperationalBadge, OperatorRoleBadge } from '../common/Badge';
+import { useAuthStore } from '../../store/useAuthStore';
+import { resolveEquipmentOperatorStatus } from '../../services/operatorAssignmentService';
 import { db } from '../../db/db';
 import { Card } from '../ui/card';
 import { Button } from '../ui/button';
@@ -25,17 +27,22 @@ interface EquipmentCardProps {
 }
 
 export const EquipmentCard: React.FC<EquipmentCardProps> = ({ equipment }) => {
-  const { schedules, overrideSchedules, runtimeLogs } = useEquipmentStore();
+  const { schedules, overrideSchedules, runtimeLogs, equipmentAssignments } = useEquipmentStore();
   const { openRoutineModal, openDowntimeModal, openTimelineModal } = useUIStore();
+  const { user } = useAuthStore();
 
   const [hasPendingOutbox, setHasPendingOutbox] = useState<boolean>(false);
 
   const tag = equipment["Tagging Number"] || equipment["Equipment ID"] || "";
   const commonName = equipment["Common Name"] || tag;
 
-  // Operational State & Schedule Meta
+  const userEmail = user?.email || '';
+  const userEmpNum = user?.employeeNumber || user?.employee_number || user?.employee_no || '';
+
+  // Operational State, Operator Assignment Status & Schedule Meta
   const opState = getEquipmentState(equipment, runtimeLogs, schedules, overrideSchedules);
   const scheduleMeta = resolveScheduleMetadata(equipment, schedules, overrideSchedules);
+  const operatorStatus = resolveEquipmentOperatorStatus(equipment, userEmail, equipmentAssignments, null, userEmpNum);
 
   // Check pending outbox actions
   useEffect(() => {
@@ -87,11 +94,14 @@ export const EquipmentCard: React.FC<EquipmentCardProps> = ({ equipment }) => {
   return (
     <Card className={`flex flex-col justify-between overflow-hidden shadow-xs hover:shadow-md transition-all ${borderClass} bg-card`}>
       <div className="p-3.5 space-y-2.5">
-        {/* Layer 1: Monospace Tag + State Badge */}
+        {/* Layer 1: Monospace Tag + Operator Role Badge + State Badge */}
         <div className="flex items-start justify-between gap-2">
-          <span className="inline-flex items-center rounded-md border border-border bg-muted/60 px-2 py-0.5 font-mono text-[11px] font-semibold text-muted-foreground">
-            {tag}
-          </span>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="inline-flex items-center rounded-md border border-border bg-muted/60 px-2 py-0.5 font-mono text-[11px] font-semibold text-muted-foreground">
+              {tag}
+            </span>
+            <OperatorRoleBadge status={operatorStatus} />
+          </div>
           <OperationalBadge
             state={opState.state}
             subState={opState.subState}

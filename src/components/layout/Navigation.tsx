@@ -1,12 +1,15 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useEquipmentStore } from '../../store/useEquipmentStore';
 import { useUIStore, RuntimeStateFilter } from '../../store/useUIStore';
+import { useAuthStore } from '../../store/useAuthStore';
 import { getEquipmentState } from '../../services/equipmentStateService';
+import { isEquipmentVisibleToUser } from '../../services/operatorAssignmentService';
 import { LayoutGrid, Clock, Search, X, ChevronRight, RotateCcw } from 'lucide-react';
 import { Input } from '../ui/input';
 
 export const Navigation: React.FC = () => {
-  const { equipment, runtimeLogs, schedules, overrideSchedules } = useEquipmentStore();
+  const { equipment, runtimeLogs, schedules, overrideSchedules, equipmentAssignments } = useEquipmentStore();
+  const { user } = useAuthStore();
   const {
     activeTab,
     setActiveTab,
@@ -20,23 +23,38 @@ export const Navigation: React.FC = () => {
     setComponentFilter
   } = useUIStore();
 
-  // Extract unique systems and components
-  const uniqueSystems = Array.from(new Set(equipment.map(e => e["System"]).filter(Boolean))) as string[];
+  const userEmail = user?.email || '';
+  const userRoles = user?.roles || [];
+  const userEmpNum = user?.employeeNumber || user?.employee_number || user?.employee_no || '';
+
+  // Scoped visible equipment for logged in user
+  const visibleEquipment = useMemo(() => {
+    return equipment.filter(eq =>
+      isEquipmentVisibleToUser(eq, userEmail, userRoles, equipmentAssignments, null, userEmpNum)
+    );
+  }, [equipment, userEmail, userRoles, equipmentAssignments, userEmpNum]);
+
+  // Extract unique systems and components from visible equipment
+  const uniqueSystems = useMemo(() => {
+    return Array.from(new Set(visibleEquipment.map(e => e["System"]).filter(Boolean))).sort() as string[];
+  }, [visibleEquipment]);
   
   // Available components for the selected system
-  const availableComponents = systemFilter
-    ? (Array.from(new Set(
-        equipment
-          .filter(e => e["System"] === systemFilter)
-          .map(e => e["Component"])
-          .filter(Boolean)
-      )) as string[])
-    : [];
+  const availableComponents = useMemo(() => {
+    return systemFilter
+      ? (Array.from(new Set(
+          visibleEquipment
+            .filter(e => e["System"] === systemFilter)
+            .map(e => e["Component"])
+            .filter(Boolean)
+        )).sort() as string[])
+      : [];
+  }, [visibleEquipment, systemFilter]);
 
   // System equipment counts
-  const systemCounts: Record<string, number> = { All: equipment.length };
+  const systemCounts: Record<string, number> = { All: visibleEquipment.length };
   uniqueSystems.forEach(sys => {
-    systemCounts[sys] = equipment.filter(e => e["System"] === sys).length;
+    systemCounts[sys] = visibleEquipment.filter(e => e["System"] === sys).length;
   });
 
   // Runtime State counts
@@ -44,7 +62,7 @@ export const Navigation: React.FC = () => {
   let downtimeCount = 0;
   let offCount = 0;
 
-  equipment.forEach(eq => {
+  visibleEquipment.forEach(eq => {
     const op = getEquipmentState(eq, runtimeLogs, schedules, overrideSchedules);
     if (op.state === 'Running') {
       runningCount++;
@@ -59,7 +77,7 @@ export const Navigation: React.FC = () => {
     {
       key: 'All',
       label: 'All Equipment',
-      count: equipment.length,
+      count: visibleEquipment.length,
       colorClass: 'text-slate-600 bg-slate-100',
       activeClass: 'bg-primary text-white border-primary shadow-xs'
     },
@@ -102,7 +120,7 @@ export const Navigation: React.FC = () => {
             onClick={() => setActiveTab('equipment')}
           >
             <LayoutGrid className="h-3.5 w-3.5" />
-            <span>Equipment ({equipment.length})</span>
+            <span>Equipment ({visibleEquipment.length})</span>
           </button>
           <button
             type="button"

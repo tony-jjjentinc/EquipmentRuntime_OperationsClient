@@ -12,13 +12,17 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Search, RotateCcw, X, SlidersHorizontal, Check } from 'lucide-react';
 
+import { useAuthStore } from '../../store/useAuthStore';
+import { isEquipmentVisibleToUser } from '../../services/operatorAssignmentService';
+
 interface MobileFilterDrawerProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
 export const MobileFilterDrawer: React.FC<MobileFilterDrawerProps> = ({ isOpen, onClose }) => {
-  const { equipment } = useEquipmentStore();
+  const { equipment, equipmentAssignments } = useEquipmentStore();
+  const { user } = useAuthStore();
   const {
     searchQuery,
     setSearchQuery,
@@ -30,15 +34,30 @@ export const MobileFilterDrawer: React.FC<MobileFilterDrawerProps> = ({ isOpen, 
     setComponentFilter
   } = useUIStore();
 
-  const uniqueSystems = Array.from(new Set(equipment.map(e => e["System"]).filter(Boolean))) as string[];
-  const availableComponents = systemFilter
-    ? (Array.from(new Set(
-        equipment
-          .filter(e => e["System"] === systemFilter)
-          .map(e => e["Component"])
-          .filter(Boolean)
-      )) as string[])
-    : [];
+  const userEmail = user?.email || '';
+  const userRoles = user?.roles || [];
+  const userEmpNum = user?.employeeNumber || user?.employee_number || user?.employee_no || '';
+
+  const visibleEquipment = React.useMemo(() => {
+    return equipment.filter(eq =>
+      isEquipmentVisibleToUser(eq, userEmail, userRoles, equipmentAssignments, null, userEmpNum)
+    );
+  }, [equipment, userEmail, userRoles, equipmentAssignments, userEmpNum]);
+
+  const uniqueSystems = React.useMemo(() => {
+    return Array.from(new Set(visibleEquipment.map(e => e["System"]).filter(Boolean))).sort() as string[];
+  }, [visibleEquipment]);
+
+  const availableComponents = React.useMemo(() => {
+    return systemFilter
+      ? (Array.from(new Set(
+          visibleEquipment
+            .filter(e => e["System"] === systemFilter)
+            .map(e => e["Component"])
+            .filter(Boolean)
+        )).sort() as string[])
+      : [];
+  }, [visibleEquipment, systemFilter]);
 
   const handleReset = () => {
     setSearchQuery('');
