@@ -146,7 +146,11 @@ export const useEquipmentStore = create<EquipmentStore>((set, get) => ({
         }));
 
         const hist: HistoryLog[] = data.historyLogs || [];
-        const assignments: EquipmentAssignment[] = data.equipmentAssignments || [];
+        const assignments: EquipmentAssignment[] = (data.equipmentAssignments || []).map((a: any) => ({
+          ...a,
+          taggingNumber: a['Tagging Number'] || a['Equipment ID'] || a.taggingNumber || '',
+          primaryOperator: a['Primary Operator'] || a.primaryOperator || ''
+        }));
         const shutTypes = data.shutdownTypes || get().shutdownTypes;
 
         const remoteConfig = {

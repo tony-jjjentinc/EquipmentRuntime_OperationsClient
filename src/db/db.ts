@@ -28,7 +28,7 @@ export class EqrtDatabase extends Dexie {
 
   constructor() {
     super('EqrtOperationsDB');
-    this.version(4).stores({
+    this.version(5).stores({
       equipment: 'taggingNumber, System, Location, Status',
       schedules: 'taggingNumber',
       overrides: 'id, taggingNumber, Date',
@@ -36,7 +36,7 @@ export class EqrtDatabase extends Dexie {
       downtimeLogs: null,
       runtimeLogs: 'transactionId, taggingNumber, LoggedDate, activityCategory, activityState',
       historyLogs: '++id, tagNumber, action, date, reportedBy, transactionId',
-      equipmentAssignments: 'taggingNumber, Scope, Primary Operator',
+      equipmentAssignments: '++id, taggingNumber, Scope, primaryOperator',
       appConfig: 'key',
       outbox: 'id, status, clientTimestamp, taggingNumber',
       photos: 'txId, logType, status, createdAt'
