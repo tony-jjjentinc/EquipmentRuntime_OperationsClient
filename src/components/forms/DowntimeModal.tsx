@@ -29,6 +29,7 @@ export const DowntimeModal: React.FC = () => {
   const [remarks, setRemarks] = useState('');
   const [photoData, setPhotoData] = useState<ProcessedPhoto | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSuccessConfirmed, setIsSuccessConfirmed] = useState(false);
 
   if (!showDowntimeModal || !selectedEquipment) return null;
 
@@ -100,10 +101,18 @@ export const DowntimeModal: React.FC = () => {
       } else if (downtimeAction === 'Restart') {
         const photoUrl = photoData ? 'data:image/jpeg;base64,' + photoData.base64 : '';
 
+        // Find active open downtime log to anchor targetSessionId
+        const activeDtLog = [...useEquipmentStore.getState().runtimeLogs].reverse().find(
+          l => (l["Tagging Number"] === tag || l["Equipment ID"] === tag || l.taggingNumber === tag) &&
+               (l["Activity Category"] === 'Downtime' || l.activityCategory === 'Downtime') &&
+               !l["Shutdown At"] && !l["Restarted At"]
+        );
+        const targetSessionId = activeDtLog ? (activeDtLog["Transaction ID"] || activeDtLog.transactionId || '') : '';
+
         // 1. Optimistic Restart
         await optimisticRestartDowntime(tag, timeNow, operatorEmail, remarks, photoUrl);
 
-        // 2. Queue into Offline Outbox
+        // 2. Queue into Offline Outbox with explicit session anchoring
         await queueOutboxAction({
           id: txId,
           actionType: 'Restart',
@@ -115,6 +124,8 @@ export const DowntimeModal: React.FC = () => {
           payload: {
             "Action": "Restart",
             "Tagging Number": tag,
+            "Target Session ID": targetSessionId,
+            targetSessionId: targetSessionId,
             "Shutdown At": timeNow,
             "Shutdown By": operatorEmail,
             "Shutdown On-Ground Remarks": remarks,
@@ -138,17 +149,35 @@ export const DowntimeModal: React.FC = () => {
         drainOutboxQueue(token).catch(err => console.warn('Background sync error:', err));
       }
 
-      closeDowntimeModal();
+      // 5. 1-second quick confirmation overlay before closing
+      setIsSuccessConfirmed(true);
+      setTimeout(() => {
+        setIsSuccessConfirmed(false);
+        setIsSubmitting(false);
+        closeDowntimeModal();
+      }, 900);
     } catch (err) {
       console.error('Failed to submit downtime action:', err);
-    } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
     <Dialog open={showDowntimeModal} onOpenChange={open => !open && closeDowntimeModal()}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md relative overflow-hidden">
+        {/* 1-Second Quick Confirmation Overlay */}
+        {isSuccessConfirmed && (
+          <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-background/95 backdrop-blur-xs text-center p-6 animate-in fade-in zoom-in duration-200">
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 mb-3 shadow-xs">
+              <RefreshCw className="h-7 w-7 text-emerald-600" />
+            </div>
+            <h3 className="text-base font-bold text-foreground">Action Recorded!</h3>
+            <p className="text-xs text-muted-foreground mt-1">
+              {downtimeAction === 'Shutdown' ? 'Downtime outage' : 'Restart action'} recorded. Syncing silently in background.
+            </p>
+          </div>
+        )}
+
         <DialogHeader>
           <DialogTitle className="text-lg font-bold flex items-center gap-2">
             <AlertTriangle className="h-5 w-5 text-rose-600" />

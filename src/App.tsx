@@ -13,6 +13,9 @@ import { StateTimeline } from './components/equipment/StateTimeline';
 import { RoutineModal } from './components/forms/RoutineModal';
 import { DowntimeModal } from './components/forms/DowntimeModal';
 import { ImageModal } from './components/common/ImageModal';
+import { BottomNav } from './components/layout/BottomNav';
+import { MobileFilterDrawer } from './components/layout/MobileFilterDrawer';
+import { SyncHealthModal } from './components/forms/SyncHealthModal';
 import { RefreshCw } from 'lucide-react';
 
 export const App: React.FC = () => {
@@ -48,22 +51,44 @@ export const App: React.FC = () => {
     return <LoginOverlay />;
   }
 
+  const [showFilterDrawer, setShowFilterDrawer] = React.useState(false);
+  const [showSyncHealthModal, setShowSyncHealthModal] = React.useState(false);
+
   return (
-    <div className="min-h-screen bg-slate-50/50 dark:bg-background text-foreground pb-8">
+    <div className="min-h-screen bg-slate-50/50 dark:bg-background text-foreground pb-20 sm:pb-8">
       <Header />
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <main className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
         <Navigation />
 
         {activeTab === 'equipment' && <EquipmentGrid />}
         {activeTab === 'history' && <ActivityHistoryFeed />}
       </main>
 
+      {/* Mobile-First Bottom Navigation Bar */}
+      <BottomNav
+        onOpenFilters={() => setShowFilterDrawer(true)}
+        onOpenSyncHealth={() => setShowSyncHealthModal(true)}
+      />
+
+      {/* Mobile Filter Sheet */}
+      <MobileFilterDrawer
+        isOpen={showFilterDrawer}
+        onClose={() => setShowFilterDrawer(false)}
+      />
+
       {/* Action Modals & Drawers */}
       <RoutineModal />
       <DowntimeModal />
       <StateTimeline />
       <ImageModal />
+
+      {/* Global Sync Health Modal */}
+      <SyncHealthModal
+        isOpen={showSyncHealthModal}
+        onClose={() => setShowSyncHealthModal(false)}
+        onOpenOutbox={() => {}}
+      />
     </div>
   );
 };

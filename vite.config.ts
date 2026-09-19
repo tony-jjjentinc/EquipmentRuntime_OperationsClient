@@ -5,6 +5,17 @@ import { VitePWA } from 'vite-plugin-pwa';
 // https://vitejs.dev/config/
 export default defineConfig({
   base: './',
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-framework': ['react', 'react-dom', 'zustand', '@radix-ui/react-dialog', '@radix-ui/react-slot', '@radix-ui/react-tabs'],
+          'vendor-icons': ['lucide-react'],
+          'vendor-tools': ['dexie', 'exifreader']
+        }
+      }
+    }
+  },
   plugins: [
     react(),
     VitePWA({

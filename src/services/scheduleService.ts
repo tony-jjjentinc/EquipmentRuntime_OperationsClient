@@ -2,10 +2,181 @@ import { Equipment, Schedule, OverrideSchedule, ScheduleMetadata } from '../type
 import { getTodayDateString } from './timeService';
 
 /**
+ * Checks if a target date matches an ordinal weekday specification (e.g. 1st Mon, 2nd Tue, Last Fri).
+ */
+export function isOrdinalWeekdayMatch(targetDate: Date, ordinal: string, weekday: string): boolean {
+  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const targetDayIdx = targetDate.getDay();
+  if (dayNames[targetDayIdx] !== weekday) return false;
+
+  const targetDayNum = targetDate.getDate();
+  const year = targetDate.getFullYear();
+  const month = targetDate.getMonth();
+
+  if (ordinal === '1st') return targetDayNum >= 1 && targetDayNum <= 7;
+  if (ordinal === '2nd') return targetDayNum >= 8 && targetDayNum <= 14;
+  if (ordinal === '3rd') return targetDayNum >= 15 && targetDayNum <= 21;
+  if (ordinal === '4th') return targetDayNum >= 22 && targetDayNum <= 28;
+  if (ordinal === 'Last') {
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    return targetDayNum > (daysInMonth - 7);
+  }
+  return false;
+}
+
+/**
+ * Evaluates whether an override rule matches a given target date string (YYYY-MM-DD).
+ * Full parity implementation with OperationsDashboard GAS recurrence engine.
+ */
+export function isOverrideDateMatch(override: OverrideSchedule, targetDateStr: string): boolean {
+  const rule = String(override["Recurrence Rule"] || "One-Time");
+  const pattern = String(override["Recurrence Pattern"] || "");
+  const startDateStr = override["Start Date"] || override["Date"];
+  const endDateStr = override["End Date"];
+  if (!startDateStr) return false;
+
+  const target = new Date(targetDateStr);
+  const startD = new Date(startDateStr);
+  const endD = endDateStr ? new Date(endDateStr) : null;
+  if (isNaN(target.getTime()) || isNaN(startD.getTime())) return false;
+
+  const targetNorm = new Date(target.getFullYear(), target.getMonth(), target.getDate()).getTime();
+  const startNorm = new Date(startD.getFullYear(), startD.getMonth(), startD.getDate()).getTime();
+
+  if (!rule.startsWith('Seasonal') && rule !== 'Weekly' && rule !== 'Monthly' && rule !== 'Quarterly') {
+    if (targetNorm < startNorm) return false;
+    if (endD && !isNaN(endD.getTime())) {
+      const endNorm = new Date(endD.getFullYear(), endD.getMonth(), endD.getDate()).getTime();
+      if (targetNorm > endNorm) return false;
+    }
+  }
+
+  if (rule === "One-Time") {
+    return startD.getFullYear() === target.getFullYear() &&
+           startD.getMonth() === target.getMonth() &&
+           startD.getDate() === target.getDate();
+  }
+
+  if (rule === "Ranged") {
+    if (!endD || isNaN(endD.getTime())) return false;
+    const endRangedNorm = new Date(endD.getFullYear(), endD.getMonth(), endD.getDate()).getTime();
+    return targetNorm >= startNorm && targetNorm <= endRangedNorm;
+  }
+
+  if (rule === "Seasonal (Weekly)" || rule === "Weekly") {
+    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const targetDayName = dayNames[target.getDay()];
+    let activeDays = [dayNames[startD.getDay()]];
+    if (pattern.startsWith("Days:")) {
+      activeDays = pattern.replace("Days:", "").split(",").map(d => d.trim());
+    }
+    return activeDays.includes(targetDayName);
+  }
+
+  if (rule === "Seasonal (Monthly)" || rule === "Monthly") {
+    if (pattern.includes("Ordinal:")) {
+      let ordinal = "1st", weekday = "Mon";
+      pattern.split(";").forEach(p => {
+        if (p.startsWith("Ordinal:")) ordinal = p.replace("Ordinal:", "").trim();
+        if (p.startsWith("Weekday:")) weekday = p.replace("Weekday:", "").trim();
+      });
+      return isOrdinalWeekdayMatch(target, ordinal, weekday);
+    }
+    
+    const targetDay = target.getDate();
+    if (pattern.startsWith("Days:")) {
+      const rangeSpec = pattern.replace("Days:", "").trim();
+      if (rangeSpec.includes("-")) {
+        const [minDay, maxDay] = rangeSpec.split("-").map(Number);
+        return targetDay >= minDay && targetDay <= maxDay;
+      } else {
+        const discreteDays = rangeSpec.split(",").map(Number);
+        return discreteDays.includes(targetDay);
+      }
+    }
+    return targetDay === startD.getDate();
+  }
+
+  if (rule === "Seasonal (Quarterly)" || rule === "Quarterly") {
+    const monthInQuarter = (target.getMonth() % 3) + 1;
+    let reqQMonth = "ALL";
+
+    const qMatch = pattern.match(/QMonth:([^;]+)/);
+    if (qMatch) reqQMonth = qMatch[1].trim();
+
+    const qMonthMatch = (reqQMonth === "ALL" || Number(reqQMonth) === monthInQuarter);
+    if (!qMonthMatch) return false;
+
+    if (pattern.includes("Ordinal:")) {
+      let ordinal = "1st", weekday = "Mon";
+      pattern.split(";").forEach(p => {
+        if (p.startsWith("Ordinal:")) ordinal = p.replace("Ordinal:", "").trim();
+        if (p.startsWith("Weekday:")) weekday = p.replace("Weekday:", "").trim();
+      });
+      return isOrdinalWeekdayMatch(target, ordinal, weekday);
+    }
+
+    const targetDay = target.getDate();
+    let minDay = 1, maxDay = 31;
+    const dMatch = pattern.match(/Days:([^;]+)/);
+    if (dMatch) {
+      const dSpec = dMatch[1].trim();
+      if (dSpec.includes("-")) {
+        [minDay, maxDay] = dSpec.split("-").map(Number);
+      } else {
+        minDay = maxDay = Number(dSpec);
+      }
+    }
+    return targetDay >= minDay && targetDay <= maxDay;
+  }
+
+  if (rule === "Seasonal (Yearly)" || rule === "Seasonal" || rule === "Seasonal Ranged") {
+    if (endD && !isNaN(endD.getTime())) {
+      let tempStart = new Date(target.getFullYear(), startD.getMonth(), startD.getDate()).getTime();
+      let tempEnd = new Date(target.getFullYear(), endD.getMonth(), endD.getDate()).getTime();
+      if (tempStart > tempEnd) {
+        if (targetNorm <= tempEnd) {
+          tempStart = new Date(target.getFullYear() - 1, startD.getMonth(), startD.getDate()).getTime();
+        } else {
+          tempEnd = new Date(target.getFullYear() + 1, endD.getMonth(), endD.getDate()).getTime();
+        }
+      }
+      return targetNorm >= tempStart && targetNorm <= tempEnd;
+    }
+    return startD.getMonth() === target.getMonth() && startD.getDate() === target.getDate();
+  }
+
+  return false;
+}
+
+/**
+ * Calculates priority score matching GAS OperationsDashboard:
+ * Rule Specificity: +70..+20
+ * Runtime Dominance: +5..+1
+ */
+export function getOverridePriorityScore(override: OverrideSchedule): number {
+  let score = 0;
+  const rule = String(override["Recurrence Rule"] || "One-Time");
+  const type = String(override["Runtime Type"] || "Custom Schedule");
+  
+  if (rule === "One-Time") score += 70;
+  else if (rule === "Ranged") score += 60;
+  else if (rule === "Seasonal (Weekly)" || rule === "Weekly") score += 50;
+  else if (rule === "Seasonal (Monthly)" || rule === "Monthly") score += 40;
+  else if (rule === "Seasonal (Quarterly)" || rule === "Quarterly") score += 30;
+  else if (rule === "Seasonal (Yearly)" || rule === "Seasonal" || rule === "Seasonal Ranged") score += 20;
+
+  if (type === "Always Off" || type === "Always Offline") score += 5;
+  else if (type === "Always On" || type === "Always Online") score += 4;
+  else if (type === "Custom Schedule") score += 3;
+  else if (type === "Startup Only") score += 2;
+  else if (type === "Shutdown Only") score += 1;
+
+  return score;
+}
+
+/**
  * Resolves the highest-priority override for an equipment on a given target date.
- * Based on the priority scale:
- * Specificity: One-Time (+40), Ranged (+30), Seasonal (+20), Seasonal Ranged (+10)
- * Runtime Dominance: Always Offline (+4), Always Online (+3), Custom/Startup/Shutdown (+2)
  */
 export function resolvePrioritizedOverride(
   overrides: OverrideSchedule[],
@@ -14,58 +185,23 @@ export function resolvePrioritizedOverride(
 ): OverrideSchedule | null {
   if (!overrides || overrides.length === 0 || !tag) return null;
 
-  const matches: { override: OverrideSchedule; score: number; index: number }[] = [];
-
-  overrides.forEach((ov, idx) => {
-    const ovTag = ov["Tagging Number"] || ov["Equipment ID"];
-    if (ovTag !== tag) return;
-
-    const ovDate = ov["Date"];
-    const startDate = ov["Start Date"];
-    const endDate = ov["End Date"];
-    const rule = ov["Recurrence Rule"] || "One-Time";
-
-    let dateMatch = false;
-
-    if (rule === "One-Time") {
-      if (ovDate === targetDateStr) dateMatch = true;
-    } else if (rule === "Ranged" || rule === "Seasonal Ranged") {
-      if (startDate && endDate && targetDateStr >= startDate && targetDateStr <= endDate) {
-        dateMatch = true;
-      }
-    } else if (rule === "Seasonal") {
-      if (ovDate && targetDateStr.endsWith(ovDate.substring(4))) {
-        dateMatch = true;
-      }
-    }
-
-    if (dateMatch) {
-      let score = 0;
-      // Specificity Score
-      if (rule === "One-Time") score += 40;
-      else if (rule === "Ranged") score += 30;
-      else if (rule === "Seasonal") score += 20;
-      else if (rule === "Seasonal Ranged") score += 10;
-
-      // Runtime Type Dominance
-      const runtimeType = ov["Runtime Type"] || "";
-      if (runtimeType === "Always Offline") score += 4;
-      else if (runtimeType === "Always Online") score += 3;
-      else score += 2;
-
-      matches.push({ override: ov, score, index: idx });
-    }
+  const matches = overrides.filter(o => {
+    const oTag = o["Tagging Number"] || o["Equipment ID"];
+    return oTag === tag && isOverrideDateMatch(o, targetDateStr);
   });
 
   if (matches.length === 0) return null;
 
-  // Sort descending by score, tie-break by later index
   matches.sort((a, b) => {
-    if (b.score !== a.score) return b.score - a.score;
-    return b.index - a.index;
+    const scoreA = getOverridePriorityScore(a);
+    const scoreB = getOverridePriorityScore(b);
+    if (scoreA !== scoreB) return scoreB - scoreA;
+    const timeA = new Date(a["Timestamp"] || 0).getTime();
+    const timeB = new Date(b["Timestamp"] || 0).getTime();
+    return timeB - timeA;
   });
 
-  return matches[0].override;
+  return matches[0];
 }
 
 /**
@@ -104,11 +240,11 @@ export function resolveScheduleMetadata(
     const runtimeType = override["Runtime Type"] || "";
     context = `Override: ${override["Recurrence Rule"] || 'One-Time'} (${runtimeType})`;
 
-    if (runtimeType === "Always Online") {
+    if (runtimeType === "Always Online" || runtimeType === "Always On") {
       expStartup = "00:00";
       expShutdown = "23:59";
       is24h = true;
-    } else if (runtimeType === "Always Offline") {
+    } else if (runtimeType === "Always Offline" || runtimeType === "Always Off") {
       expStartup = "--:--";
       expShutdown = "--:--";
       is24h = false;

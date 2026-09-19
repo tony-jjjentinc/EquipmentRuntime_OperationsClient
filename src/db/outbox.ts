@@ -83,6 +83,32 @@ export async function getPendingOutboxCount(): Promise<number> {
 }
 
 /**
+ * Retrieve all outbox items regardless of status
+ */
+export async function getAllOutboxItems(): Promise<OutboxItem[]> {
+  const items = await db.outbox.toArray();
+  return items.sort((a, b) => new Date(b.clientTimestamp).getTime() - new Date(a.clientTimestamp).getTime());
+}
+
+/**
+ * Reset a failed or stuck item back to PENDING
+ */
+export async function retryFailedOutboxItem(id: string): Promise<void> {
+  await db.outbox.update(id, {
+    status: 'PENDING',
+    lastError: undefined
+  });
+}
+
+/**
+ * Manually discard an outbox item and associated photo
+ */
+export async function deleteOutboxItem(id: string): Promise<void> {
+  await db.outbox.delete(id);
+  await db.photos.delete(id);
+}
+
+/**
  * Retrieve photo blob by transaction id
  */
 export async function getPhotoBlob(txId: string): Promise<PhotoBlobItem | undefined> {

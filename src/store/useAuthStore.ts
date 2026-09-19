@@ -46,15 +46,18 @@ export const useAuthStore = create<AuthStore>((set) => ({
     const savedToken = localStorage.getItem('eqrt_auth_token') || sessionStorage.getItem('sessionToken') || '';
     if (savedToken) {
       const parsed = parseJwt(savedToken);
-      if (parsed && parsed.exp && parsed.exp * 1000 > Date.now()) {
-        set({
-          token: savedToken,
-          user: parsed,
-          isAuthenticated: true,
-          isLoading: false,
-          error: null
-        });
-        return;
+      if (parsed && parsed.exp) {
+        const expMs = parsed.exp < 1e12 ? parsed.exp * 1000 : parsed.exp;
+        if (expMs > Date.now()) {
+          set({
+            token: savedToken,
+            user: parsed,
+            isAuthenticated: true,
+            isLoading: false,
+            error: null
+          });
+          return;
+        }
       }
     }
     // No valid token

@@ -64,12 +64,24 @@ export const useEquipmentStore = create<EquipmentStore>((set, get) => ({
     let cachedSched: Schedule[] = [];
     let cachedOv: OverrideSchedule[] = [];
     let cachedRuntime: RuntimeLog[] = [];
+    let cachedHistory: HistoryLog[] = [];
+    let cachedAssignments: EquipmentAssignment[] = [];
+    let cachedConfig: any = null;
 
     try {
       cachedEq = await db.equipment.toArray();
       cachedSched = await db.schedules.toArray();
       cachedOv = await db.overrides.toArray();
       cachedRuntime = await db.runtimeLogs.toArray();
+      cachedHistory = await db.historyLogs.toArray();
+      cachedAssignments = await db.equipmentAssignments.toArray();
+      const configRows = await db.appConfig.toArray();
+      if (configRows.length > 0) {
+        cachedConfig = {};
+        configRows.forEach(c => {
+          cachedConfig[c.key] = c.value;
+        });
+      }
 
       if (cachedEq.length > 0) {
         set({
@@ -77,6 +89,16 @@ export const useEquipmentStore = create<EquipmentStore>((set, get) => ({
           schedules: cachedSched,
           overrideSchedules: cachedOv,
           runtimeLogs: cachedRuntime,
+          historyLogs: cachedHistory,
+          equipmentAssignments: cachedAssignments,
+          appConfig: cachedConfig ? {
+            name: cachedConfig.name || get().appConfig.name,
+            version: cachedConfig.version || get().appConfig.version,
+            photoRecencyHours: cachedConfig.photoRecencyHours !== undefined ? Number(cachedConfig.photoRecencyHours) : 3,
+            strictPhotoRecency: cachedConfig.strictPhotoRecency !== undefined ? !!cachedConfig.strictPhotoRecency : true,
+            backgroundHydrationIntervalMs: cachedConfig.backgroundHydrationIntervalMs || 120000
+          } : get().appConfig,
+          shutdownTypes: cachedConfig?.shutdownTypes || get().shutdownTypes,
           isLoading: false
         });
       } else {
@@ -123,9 +145,17 @@ export const useEquipmentStore = create<EquipmentStore>((set, get) => ({
           activityState: r['Activity State'] || r.activityState || 'Running'
         }));
 
-        const hist = data.historyLogs || [];
-        const assignments = data.equipmentAssignments || [];
+        const hist: HistoryLog[] = data.historyLogs || [];
+        const assignments: EquipmentAssignment[] = data.equipmentAssignments || [];
         const shutTypes = data.shutdownTypes || get().shutdownTypes;
+
+        const remoteConfig = {
+          name: data.name || get().appConfig.name,
+          version: data.version || get().appConfig.version,
+          photoRecencyHours: data.photoRecencyHours !== undefined ? Number(data.photoRecencyHours) : 3,
+          strictPhotoRecency: data.strictPhotoRecency !== undefined ? !!data.strictPhotoRecency : true,
+          backgroundHydrationIntervalMs: data.backgroundHydrationIntervalMs || 120000
+        };
 
         set({
           equipment: enrichedEq,
@@ -135,13 +165,7 @@ export const useEquipmentStore = create<EquipmentStore>((set, get) => ({
           historyLogs: hist,
           equipmentAssignments: assignments,
           shutdownTypes: shutTypes,
-          appConfig: {
-            name: data.name || get().appConfig.name,
-            version: data.version || get().appConfig.version,
-            photoRecencyHours: data.photoRecencyHours !== undefined ? Number(data.photoRecencyHours) : 3,
-            strictPhotoRecency: data.strictPhotoRecency !== undefined ? !!data.strictPhotoRecency : true,
-            backgroundHydrationIntervalMs: data.backgroundHydrationIntervalMs || 120000
-          },
+          appConfig: remoteConfig,
           isLoading: false,
           lastHydrated: new Date(),
           error: null
@@ -157,6 +181,20 @@ export const useEquipmentStore = create<EquipmentStore>((set, get) => ({
           await db.overrides.bulkPut(overrides);
           await db.runtimeLogs.clear();
           await db.runtimeLogs.bulkPut(runtimes);
+          await db.historyLogs.clear();
+          if (hist.length > 0) await db.historyLogs.bulkPut(hist);
+          await db.equipmentAssignments.clear();
+          if (assignments.length > 0) await db.equipmentAssignments.bulkPut(assignments);
+          
+          await db.appConfig.clear();
+          await db.appConfig.bulkPut([
+            { key: 'name', value: remoteConfig.name },
+            { key: 'version', value: remoteConfig.version },
+            { key: 'photoRecencyHours', value: remoteConfig.photoRecencyHours },
+            { key: 'strictPhotoRecency', value: remoteConfig.strictPhotoRecency },
+            { key: 'backgroundHydrationIntervalMs', value: remoteConfig.backgroundHydrationIntervalMs },
+            { key: 'shutdownTypes', value: shutTypes }
+          ]);
         } catch (cacheErr) {
           console.warn('Dexie cache write warning:', cacheErr);
         }
@@ -190,7 +228,7 @@ export const useEquipmentStore = create<EquipmentStore>((set, get) => ({
           activityState: r['Activity State'] || r.activityState || 'Running'
         })) : [...get().runtimeLogs];
 
-        // FIX-11: Overlay local in-flight outbox actions that have not yet landed in remote Google Sheets
+        // Overlay local in-flight outbox actions that have not yet landed in remote Google Sheets
         try {
           const pendingItems = await db.outbox.where('status').anyOf('PENDING', 'SYNCING').toArray();
           for (const item of pendingItems) {
@@ -231,15 +269,26 @@ export const useEquipmentStore = create<EquipmentStore>((set, get) => ({
           console.warn('Could not overlay outbox items during silent hydration:', dbErr);
         }
 
+        const hist: HistoryLog[] = data.historyLogs || get().historyLogs;
+
         set({
           equipment: data.equipment || get().equipment,
           schedules: data.schedules || get().schedules,
           overrideSchedules: data.overrideSchedules || get().overrideSchedules,
           runtimeLogs: freshLogs,
-          historyLogs: data.historyLogs || get().historyLogs,
+          historyLogs: hist,
           lastHydrated: new Date(),
           isHydrating: false
         });
+
+        // Background update Dexie tables
+        try {
+          if (data.equipment) await db.equipment.bulkPut(data.equipment);
+          if (data.historyLogs) {
+            await db.historyLogs.clear();
+            await db.historyLogs.bulkPut(data.historyLogs);
+          }
+        } catch (e) {}
       }
     } catch (err) {
       set({ isHydrating: false });
@@ -276,6 +325,9 @@ export const useEquipmentStore = create<EquipmentStore>((set, get) => ({
   optimisticRestartDowntime: async (tag: string, restartTime: string, operator: string, remarks?: string, shutdownImage?: string) => {
     const todayFormatted = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 
+    let closedLogToPersist: RuntimeLog | null = null;
+    let resumedLogToPersist: RuntimeLog | null = null;
+
     set(state => {
       // 1. Close open downtime log
       const updated = state.runtimeLogs.map(log => {
@@ -283,7 +335,7 @@ export const useEquipmentStore = create<EquipmentStore>((set, get) => ({
         const isDowntime = (log["Activity Category"] === 'Downtime' || log.activityCategory === 'Downtime');
         const isOpen = !log["Shutdown At"] && !log["Restarted At"];
         if (isMatch && isDowntime && isOpen) {
-          return {
+          const closed = {
             ...log,
             "Shutdown At": restartTime,
             "Shutdown By": operator,
@@ -292,6 +344,8 @@ export const useEquipmentStore = create<EquipmentStore>((set, get) => ({
             "Activity State": 'Completed',
             activityState: 'Completed'
           };
+          closedLogToPersist = closed;
+          return closed;
         }
         return log;
       });
@@ -316,24 +370,14 @@ export const useEquipmentStore = create<EquipmentStore>((set, get) => ({
         "Start On-Ground Remarks": `[Resumed after Downtime Outage] ${remarks || ''}`.trim(),
         Action: 'Startup'
       };
+      resumedLogToPersist = resumedLog;
 
       return { runtimeLogs: [...updated, resumedLog] };
     });
 
     try {
-      const openLogs = await db.runtimeLogs.where('taggingNumber').equals(tag).toArray();
-      for (const d of openLogs) {
-        if ((d["Activity Category"] === 'Downtime' || d.activityCategory === 'Downtime') && !d["Shutdown At"] && !d["Restarted At"]) {
-          await db.runtimeLogs.put({
-            ...d,
-            "Shutdown At": restartTime,
-            "Shutdown By": operator,
-            "Shutdown On-Ground Remarks": remarks || '',
-            "Activity State": 'Completed',
-            activityState: 'Completed'
-          });
-        }
-      }
+      if (closedLogToPersist) await db.runtimeLogs.put(closedLogToPersist);
+      if (resumedLogToPersist) await db.runtimeLogs.put(resumedLogToPersist);
     } catch (err) {
       console.warn('Dexie optimisticRestartDowntime notice:', err);
     }

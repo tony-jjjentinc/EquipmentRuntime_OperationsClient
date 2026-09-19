@@ -28,6 +28,7 @@ export const RoutineModal: React.FC = () => {
   const [remarks, setRemarks] = useState('');
   const [photoData, setPhotoData] = useState<ProcessedPhoto | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSuccessConfirmed, setIsSuccessConfirmed] = useState(false);
 
   if (!showRoutineModal || !selectedEquipment) return null;
 
@@ -45,9 +46,24 @@ export const RoutineModal: React.FC = () => {
     const todayFormatted = getFormattedDate();
     const timeNow = get24HourTime();
 
+    const isShutdown = routineAction === 'Shutdown';
+    let targetSessionId = '';
+    if (isShutdown) {
+      const activeRoutineLog = [...useEquipmentStore.getState().runtimeLogs].reverse().find(
+        l => (l["Tagging Number"] === tag || l["Equipment ID"] === tag || l.taggingNumber === tag) &&
+             (l["Activity Category"] === 'Routine' || l.activityCategory === 'Routine') &&
+             !l["Shutdown At"]
+      );
+      if (activeRoutineLog) {
+        targetSessionId = activeRoutineLog["Transaction ID"] || activeRoutineLog.transactionId || '';
+      }
+    }
+
     const runtimeLog: RuntimeLog = {
       "Transaction ID": txId,
       transactionId: txId,
+      "Target Session ID": targetSessionId,
+      targetSessionId: targetSessionId,
       "System": selectedEquipment["System"] || "",
       "Component": selectedEquipment["Component"] || "",
       "Tagging Number": tag,
@@ -105,17 +121,35 @@ export const RoutineModal: React.FC = () => {
         drainOutboxQueue(token).catch(err => console.warn('Background sync error:', err));
       }
 
-      closeRoutineModal();
+      // 5. 1-second quick confirmation overlay before closing
+      setIsSuccessConfirmed(true);
+      setTimeout(() => {
+        setIsSuccessConfirmed(false);
+        setIsSubmitting(false);
+        closeRoutineModal();
+      }, 900);
     } catch (err) {
       console.error('Failed to submit routine action:', err);
-    } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
     <Dialog open={showRoutineModal} onOpenChange={open => !open && closeRoutineModal()}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md relative overflow-hidden">
+        {/* 1-Second Quick Confirmation Overlay */}
+        {isSuccessConfirmed && (
+          <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-background/95 backdrop-blur-xs text-center p-6 animate-in fade-in zoom-in duration-200">
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 mb-3 shadow-xs">
+              <RefreshCw className="h-7 w-7 text-emerald-600" />
+            </div>
+            <h3 className="text-base font-bold text-foreground">Action Recorded!</h3>
+            <p className="text-xs text-muted-foreground mt-1">
+              {routineAction} recorded successfully. Syncing silently in background.
+            </p>
+          </div>
+        )}
+
         <DialogHeader>
           <DialogTitle className="text-lg font-bold">
             {routineAction === 'Startup' ? 'Routine Startup' : 'Routine Shutdown'}
